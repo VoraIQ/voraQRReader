@@ -3,7 +3,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
-import { createLink } from '@/lib/db';
+import { createLink, deleteLink } from '@/lib/db';
 import { sanitizeQrStyle } from '@/lib/qrStyles';
 import { SESSION_COOKIE_NAME } from '@/lib/auth';
 
@@ -28,6 +28,18 @@ export async function createLinkAction(formData: FormData) {
   const { code } = await createLink(destinationUrl.trim(), typeof label === 'string' ? label.trim() : '', style);
   revalidatePath('/');
   redirect(`/?created=${code}`);
+}
+
+export async function deleteLinkAction(formData: FormData) {
+  const idRaw = formData.get('id');
+  const id = typeof idRaw === 'string' ? Number(idRaw) : NaN;
+
+  if (!Number.isInteger(id)) {
+    throw new Error('A valid link id is required.');
+  }
+
+  await deleteLink(id);
+  revalidatePath('/');
 }
 
 export async function logoutAction() {

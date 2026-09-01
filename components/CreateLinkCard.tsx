@@ -91,6 +91,8 @@ export default function CreateLinkCard() {
     fgColor,
     bgColor,
   };
+  const isCustomFg = !FOREGROUND_SWATCHES.some((s) => s.value === fgColor);
+  const isCustomBg = !BACKGROUND_SWATCHES.some((s) => s.value === bgColor);
 
   function persistStyle(next: QrStyleConfig) {
     try {
@@ -222,6 +224,14 @@ export default function CreateLinkCard() {
                     onClick={() => selectFgColor(s.value)}
                   />
                 ))}
+                <input
+                  type="color"
+                  value={fgColor}
+                  onChange={(e) => selectFgColor(e.target.value)}
+                  title="Custom color"
+                  aria-label="Custom foreground color"
+                  className={`swatch-btn swatch-color-input${isCustomFg ? ' swatch-btn-active' : ''}`}
+                />
               </div>
             </div>
             <div className="swatch-group">
@@ -239,6 +249,14 @@ export default function CreateLinkCard() {
                     onClick={() => selectBgColor(s.value)}
                   />
                 ))}
+                <input
+                  type="color"
+                  value={bgColor}
+                  onChange={(e) => selectBgColor(e.target.value)}
+                  title="Custom color"
+                  aria-label="Custom background color"
+                  className={`swatch-btn swatch-color-input${isCustomBg ? ' swatch-btn-active' : ''}`}
+                />
               </div>
             </div>
             <div className="logo-section">

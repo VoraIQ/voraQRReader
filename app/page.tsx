@@ -3,6 +3,7 @@ import { findPresetForStyle } from '@/lib/qrStyles';
 import DashboardHeader from '@/components/DashboardHeader';
 import CreateLinkCard from '@/components/CreateLinkCard';
 import QrPreview from '@/components/QrPreview';
+import DeleteLinkButton from '@/components/DeleteLinkButton';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,6 +116,9 @@ export default async function DashboardPage({
                       {link.scanCount > 0 ? `${Math.round((link.actionCount / link.scanCount) * 100)}%` : '—'}
                     </span>
                   </div>
+                </div>
+                <div className="code-row-delete">
+                  <DeleteLinkButton id={link.id} label={link.label || 'Untitled code'} />
                 </div>
               </div>
             );

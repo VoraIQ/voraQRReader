@@ -50,6 +50,11 @@ export async function getLinksWithStats(): Promise<LinkStats[]> {
   return rows as unknown as LinkStats[];
 }
 
+/** Permanently deletes a link and its scan/action history (cascades). */
+export async function deleteLink(id: number): Promise<void> {
+  await sql`DELETE FROM links WHERE id = ${id}`;
+}
+
 /**
  * Logs a scan for the given short code and returns the destination URL to
  * redirect to. Returns null if the code doesn't exist.

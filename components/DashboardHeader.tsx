@@ -19,27 +19,25 @@ export default function DashboardHeader({ codes, scans, actions }: DashboardHead
         <h1>QR Tracker</h1>
         <p style={{ color: 'var(--color-label-secondary)' }}>Scan and conversion analytics for every code you print.</p>
       </div>
-      <div className="dash-header-right">
-        <div className="dash-header-stats">
-          <div className="dash-stat">
-            <span className="overline">Codes</span>
-            <span className="dash-stat-value">{formatStat(codes)}</span>
-          </div>
-          <div className="dash-stat">
-            <span className="overline">Scans</span>
-            <span className="dash-stat-value">{formatStat(scans)}</span>
-          </div>
-          <div className="dash-stat">
-            <span className="overline">Actions</span>
-            <span className="dash-stat-value">{formatStat(actions)}</span>
-          </div>
+      <div className="dash-header-stats">
+        <div className="dash-stat">
+          <span className="overline">Codes</span>
+          <span className="dash-stat-value">{formatStat(codes)}</span>
         </div>
-        <form action={logoutAction}>
-          <button type="submit" className="btn-link">
-            Sign out
-          </button>
-        </form>
+        <div className="dash-stat">
+          <span className="overline">Scans</span>
+          <span className="dash-stat-value">{formatStat(scans)}</span>
+        </div>
+        <div className="dash-stat">
+          <span className="overline">Actions</span>
+          <span className="dash-stat-value">{formatStat(actions)}</span>
+        </div>
       </div>
+      <form action={logoutAction} className="dash-signout">
+        <button type="submit" className="btn-link">
+          Sign out
+        </button>
+      </form>
     </header>
   );
 }
