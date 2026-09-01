@@ -1,10 +1,12 @@
 export default function Home() {
   return (
-    <main className="page">
-      <h1 className="page-title">QR Tracker</h1>
-      <p className="page-subtitle">
-        <a href="/dashboard">Go to dashboard</a>
-      </p>
+    <main className="vora-page">
+      <div className="vora-container">
+        <h1>QR Tracker</h1>
+        <p>
+          <a href="/dashboard">Go to dashboard</a>
+        </p>
+      </div>
     </main>
   );
 }
