@@ -10,6 +10,7 @@ import {
   MAX_LOGO_BYTES,
   QR_PRESETS,
   findPresetForStyle,
+  hasSafeContrast,
   sanitizeQrStyle,
   type QrLogoSize,
   type QrStyleConfig,
@@ -38,13 +39,15 @@ const BACKGROUND_SWATCHES = [
 const LOGO_SIZE_LABELS: Record<QrLogoSize, string> = { 0.24: 'Small', 0.32: 'Medium', 0.4: 'Large' };
 const ALLOWED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/svg+xml'];
 
-function isValidDestinationUrl(value: string): boolean {
-  if (!value) return false;
+/** Returns the destination's hostname if it's a well-formed http(s) URL, otherwise null. */
+function parseDestinationHostname(value: string): string | null {
+  if (!value) return null;
   try {
     const parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.hostname;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -67,6 +70,7 @@ export default function CreateLinkCard() {
   const [logo, setLogo] = useState<string | null>(null);
   const [logoSize, setLogoSize] = useState<QrLogoSize>(0.32);
   const [logoError, setLogoError] = useState<string | null>(null);
+  const [colorWarning, setColorWarning] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -92,7 +96,6 @@ export default function CreateLinkCard() {
     bgColor,
   };
   const isCustomFg = !FOREGROUND_SWATCHES.some((s) => s.value === fgColor);
-  const isCustomBg = !BACKGROUND_SWATCHES.some((s) => s.value === bgColor);
 
   function persistStyle(next: QrStyleConfig) {
     try {
@@ -109,11 +112,21 @@ export default function CreateLinkCard() {
   }
 
   function selectFgColor(value: string) {
+    if (!hasSafeContrast(value, bgColor)) {
+      setColorWarning('That color is too close to the background for reliable scanning — try something darker.');
+      return;
+    }
+    setColorWarning(null);
     setFgColor(value);
     persistStyle({ ...style, fgColor: value });
   }
 
   function selectBgColor(value: string) {
+    if (!hasSafeContrast(fgColor, value)) {
+      setColorWarning('That background would make the current foreground too hard to scan.');
+      return;
+    }
+    setColorWarning(null);
     setBgColor(value);
     persistStyle({ ...style, bgColor: value });
   }
@@ -142,7 +155,8 @@ export default function CreateLinkCard() {
   }
 
   const trimmedUrl = destinationUrl.trim();
-  const isUrlValid = isValidDestinationUrl(trimmedUrl);
+  const destinationHostname = parseDestinationHostname(trimmedUrl);
+  const isUrlValid = !!destinationHostname;
   const showUrlError = urlTouched && trimmedUrl.length > 0 && !isUrlValid;
   const logoOptions = logo ? { image: logo, imageSize: logoSize } : undefined;
 
@@ -249,14 +263,6 @@ export default function CreateLinkCard() {
                     onClick={() => selectBgColor(s.value)}
                   />
                 ))}
-                <input
-                  type="color"
-                  value={bgColor}
-                  onChange={(e) => selectBgColor(e.target.value)}
-                  title="Custom color"
-                  aria-label="Custom background color"
-                  className={`swatch-btn swatch-color-input${isCustomBg ? ' swatch-btn-active' : ''}`}
-                />
               </div>
             </div>
             <div className="logo-section">
@@ -310,6 +316,7 @@ export default function CreateLinkCard() {
               )}
             </div>
           </div>
+          {colorWarning && <span className="caption field-error">{colorWarning}</span>}
 
           <input type="hidden" name="style" value={JSON.stringify(style)} />
         </div>
@@ -320,6 +327,7 @@ export default function CreateLinkCard() {
             <QrPreview url={PREVIEW_DATA} style={style} logo={logoOptions} size={188} showDownload downloadName="qr-preview" />
           </div>
           <div className="preview-meta">
+            {destinationHostname && <span className="preview-destination">→ {destinationHostname}</span>}
             <span className="mono preview-url">{PREVIEW_DATA}</span>
             <span className="caption">Short code is assigned on create</span>
           </div>

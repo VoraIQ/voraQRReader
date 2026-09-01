@@ -4,6 +4,14 @@ import { useEffect, useRef } from 'react';
 import QRCodeStyling, { type Options } from 'qr-code-styling';
 import { DEFAULT_STYLE, type QrLogoSize, type QrStyleConfig } from '@/lib/qrStyles';
 
+// Downloads are always generated at this resolution regardless of the
+// on-screen preview size (52-188px). 4000px covers large-format raster
+// printing (posters, t-shirt transfers) at a real print DPI — PNG is
+// still a fixed raster no matter how large, though, so for anything
+// bigger (banners, billboards) the SVG download is the right choice:
+// it's vector, so it scales losslessly to any size.
+const DOWNLOAD_SIZE = 4000;
+
 interface QrLogoOptions {
   image: string;
   imageSize: QrLogoSize;
@@ -49,6 +57,18 @@ function buildOptions(url: string, style: QrStyleConfig, size: number, logo: QrL
   };
 }
 
+/** Builds a dedicated full-resolution instance for downloads — never the on-screen preview instance, which may be tiny (a 52px preset thumbnail). */
+function downloadAt(
+  url: string,
+  style: QrStyleConfig,
+  logo: QrLogoOptions | null | undefined,
+  name: string,
+  extension: 'png' | 'svg'
+) {
+  const instance = new QRCodeStyling(buildOptions(url, style, DOWNLOAD_SIZE, logo));
+  instance.download({ name, extension });
+}
+
 export default function QrPreview({
   url,
   style,
@@ -86,14 +106,14 @@ export default function QrPreview({
           <button
             type="button"
             className="btn-outline btn-sm"
-            onClick={() => qrRef.current?.download({ name: downloadName, extension: 'png' })}
+            onClick={() => downloadAt(url, resolvedStyle, logo, downloadName, 'png')}
           >
             PNG
           </button>
           <button
             type="button"
             className="btn-outline btn-sm"
-            onClick={() => qrRef.current?.download({ name: downloadName, extension: 'svg' })}
+            onClick={() => downloadAt(url, resolvedStyle, logo, downloadName, 'svg')}
           >
             SVG
           </button>

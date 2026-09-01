@@ -67,6 +67,42 @@ export type QrLogoSize = 0.24 | 0.32 | 0.4;
 export const LOGO_SIZES: QrLogoSize[] = [0.24, 0.32, 0.4];
 export const MAX_LOGO_BYTES = 512 * 1024;
 
+// Scan reliability is non-negotiable: a QR scanner needs a strong light/dark
+// split between modules, so any color choice (curated swatch or custom pick)
+// must clear a minimum contrast ratio against the current background before
+// it's applied. Calibrated, not guessed: the lightest existing preset pairing
+// (Vora blue foreground on white/pale-blue/brand-tint backgrounds) sits at a
+// WCAG contrast ratio of ~3.1, so 2.5 gives it headroom without opening the
+// door to genuinely low-contrast combinations (e.g. a pale custom color on a
+// light background lands well under 2).
+export const MIN_CONTRAST_RATIO = 2.5;
+
+function srgbChannelToLinear(value: number): number {
+  const c = value / 255;
+  return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+function relativeLuminance(hexColor: string): number {
+  const r = parseInt(hexColor.slice(1, 3), 16);
+  const g = parseInt(hexColor.slice(3, 5), 16);
+  const b = parseInt(hexColor.slice(5, 7), 16);
+  return 0.2126 * srgbChannelToLinear(r) + 0.7152 * srgbChannelToLinear(g) + 0.0722 * srgbChannelToLinear(b);
+}
+
+/** WCAG-style contrast ratio between two `#rrggbb` colors, from 1 (identical) to 21 (black/white). */
+export function contrastRatio(hexColorA: string, hexColorB: string): number {
+  const luminanceA = relativeLuminance(hexColorA);
+  const luminanceB = relativeLuminance(hexColorB);
+  const lighter = Math.max(luminanceA, luminanceB);
+  const darker = Math.min(luminanceA, luminanceB);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+/** Whether a foreground/background pair has enough contrast to scan reliably. */
+export function hasSafeContrast(fgColor: string, bgColor: string): boolean {
+  return contrastRatio(fgColor, bgColor) >= MIN_CONTRAST_RATIO;
+}
+
 const SHAPE_TYPES: ReadonlySet<string> = new Set<QrShapeType>([
   'square',
   'dots',
