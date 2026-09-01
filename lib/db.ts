@@ -1,5 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { nanoid } from 'nanoid';
+import type { QrStyleConfig } from './qrStyles';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -11,14 +12,19 @@ export interface LinkStats {
   createdAt: string;
   scanCount: number;
   actionCount: number;
+  style: QrStyleConfig | null;
 }
 
 /** Creates a new tracked link and returns its short code. */
-export async function createLink(destinationUrl: string, label: string) {
+export async function createLink(
+  destinationUrl: string,
+  label: string,
+  style: QrStyleConfig | null = null
+) {
   const code = nanoid(7);
   await sql`
-    INSERT INTO links (code, destination_url, label)
-    VALUES (${code}, ${destinationUrl}, ${label || null})
+    INSERT INTO links (code, destination_url, label, style)
+    VALUES (${code}, ${destinationUrl}, ${label || null}, ${style ? JSON.stringify(style) : null})
   `;
   return { code };
 }
@@ -32,6 +38,7 @@ export async function getLinksWithStats(): Promise<LinkStats[]> {
       l.destination_url AS "destinationUrl",
       l.label,
       l.created_at AS "createdAt",
+      l.style,
       COUNT(DISTINCT s.click_id)::int AS "scanCount",
       COUNT(DISTINCT a.id)::int AS "actionCount"
     FROM links l

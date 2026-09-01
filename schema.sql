@@ -5,7 +5,11 @@ CREATE TABLE IF NOT EXISTS links (
   code TEXT UNIQUE NOT NULL,
   destination_url TEXT NOT NULL,
   label TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  -- QR dot/corner shapes + colors as a single JSON blob (see lib/qrStyles.ts).
+  -- NULL means render the plain default look (all links created before this
+  -- column existed, or if style parsing ever fails).
+  style JSONB
 );
 
 CREATE TABLE IF NOT EXISTS scans (

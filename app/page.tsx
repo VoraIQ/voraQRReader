@@ -1,8 +1,8 @@
 export default function Home() {
   return (
-    <main style={{ fontFamily: 'sans-serif', padding: 40 }}>
-      <h1>QR Tracker</h1>
-      <p>
+    <main className="page">
+      <h1 className="page-title">QR Tracker</h1>
+      <p className="page-subtitle">
         <a href="/dashboard">Go to dashboard</a>
       </p>
     </main>

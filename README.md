@@ -20,6 +20,13 @@ Marketplace), deployed on Vercel.
 5. The dashboard shows scan count, action count, and conversion rate per
    QR code.
 
+Each QR code can have its own dot/corner shape and color pair, picked from
+a handful of presets (Classic, Rounded, Dots, Classy) when you create the
+link. This is purely cosmetic — it never changes the encoded URL — and is
+rendered entirely client-side by `qr-code-styling` (MIT licensed), so there's
+no external service and no server-side rendering cost. Each row's QR code
+can be downloaded as PNG or SVG.
+
 ## Setup
 
 1. Install dependencies:
@@ -42,6 +49,9 @@ Marketplace), deployed on Vercel.
    ```
    psql "$DATABASE_URL" -f schema.sql
    ```
+   If your database already existed before QR styling was added, also run
+   the migration in `migrations/001_add_style_column.sql` (it's already
+   included in `schema.sql` for fresh installs).
 
 5. In Vercel Project Settings > Environment Variables, set:
    - `DASHBOARD_PASSWORD` - whatever password you want for `/dashboard`
