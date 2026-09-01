@@ -1,16 +1,20 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import QRCodeStyling, { type Options } from 'qr-code-styling';
 import { DEFAULT_STYLE, type QrLogoSize, type QrStyleConfig } from '@/lib/qrStyles';
 
-// Downloads are always generated at this resolution regardless of the
-// on-screen preview size (52-188px). 4000px covers large-format raster
-// printing (posters, t-shirt transfers) at a real print DPI — PNG is
-// still a fixed raster no matter how large, though, so for anything
-// bigger (banners, billboards) the SVG download is the right choice:
-// it's vector, so it scales losslessly to any size.
-const DOWNLOAD_SIZE = 4000;
+// Downloads are generated at a dedicated resolution regardless of the
+// on-screen preview size (52-188px), adjustable via the quality slider.
+// The top end covers large-format raster printing (posters, t-shirt
+// transfers) at a real print DPI — PNG is still a fixed raster no matter
+// how large, though, so for anything bigger (banners, billboards) the SVG
+// download is the right choice: it's vector, so it scales losslessly to
+// any size regardless of where the slider sits.
+const MIN_DOWNLOAD_SIZE = 200;
+const MAX_DOWNLOAD_SIZE = 4000;
+const DOWNLOAD_SIZE_STEP = 100;
+const DEFAULT_DOWNLOAD_SIZE = MAX_DOWNLOAD_SIZE;
 
 interface QrLogoOptions {
   image: string;
@@ -57,15 +61,16 @@ function buildOptions(url: string, style: QrStyleConfig, size: number, logo: QrL
   };
 }
 
-/** Builds a dedicated full-resolution instance for downloads — never the on-screen preview instance, which may be tiny (a 52px preset thumbnail). */
+/** Builds a dedicated instance for downloads at the chosen quality — never the on-screen preview instance, which may be tiny (a 52px preset thumbnail). */
 function downloadAt(
   url: string,
   style: QrStyleConfig,
   logo: QrLogoOptions | null | undefined,
+  downloadSize: number,
   name: string,
   extension: 'png' | 'svg'
 ) {
-  const instance = new QRCodeStyling(buildOptions(url, style, DOWNLOAD_SIZE, logo));
+  const instance = new QRCodeStyling(buildOptions(url, style, downloadSize, logo));
   instance.download({ name, extension });
 }
 
@@ -82,6 +87,8 @@ export default function QrPreview({
   const qrRef = useRef<QRCodeStyling | null>(null);
   const resolvedStyle = style ?? DEFAULT_STYLE;
   const optionsKey = JSON.stringify(resolvedStyle) + (logo ? `|${logo.imageSize}|${logo.image.length}` : '');
+  const [downloadSize, setDownloadSize] = useState(DEFAULT_DOWNLOAD_SIZE);
+  const qualityPercent = ((downloadSize - MIN_DOWNLOAD_SIZE) / (MAX_DOWNLOAD_SIZE - MIN_DOWNLOAD_SIZE)) * 100;
 
   useEffect(() => {
     const options = buildOptions(url, resolvedStyle, size, logo);
@@ -102,22 +109,44 @@ export default function QrPreview({
     <div className={className}>
       <div ref={containerRef} style={{ width: size, height: size }} role="img" aria-label={`QR code for ${url}`} />
       {showDownload && (
-        <div className="qr-download-row">
-          <button
-            type="button"
-            className="btn-outline btn-sm"
-            onClick={() => downloadAt(url, resolvedStyle, logo, downloadName, 'png')}
-          >
-            PNG
-          </button>
-          <button
-            type="button"
-            className="btn-outline btn-sm"
-            onClick={() => downloadAt(url, resolvedStyle, logo, downloadName, 'svg')}
-          >
-            SVG
-          </button>
-        </div>
+        <>
+          <div className="qr-quality">
+            <span className="qr-quality-value">
+              {downloadSize} × {downloadSize} px
+            </span>
+            <input
+              type="range"
+              min={MIN_DOWNLOAD_SIZE}
+              max={MAX_DOWNLOAD_SIZE}
+              step={DOWNLOAD_SIZE_STEP}
+              value={downloadSize}
+              onChange={(e) => setDownloadSize(Number(e.target.value))}
+              className="qr-quality-slider"
+              style={{ background: `linear-gradient(to right, var(--color-brand-primary) ${qualityPercent}%, var(--color-separator-opaque) ${qualityPercent}%)` }}
+              aria-label="Download quality"
+            />
+            <div className="qr-quality-labels">
+              <span>Low quality</span>
+              <span>High quality</span>
+            </div>
+          </div>
+          <div className="qr-download-row">
+            <button
+              type="button"
+              className="btn-outline btn-sm"
+              onClick={() => downloadAt(url, resolvedStyle, logo, downloadSize, downloadName, 'png')}
+            >
+              PNG
+            </button>
+            <button
+              type="button"
+              className="btn-outline btn-sm"
+              onClick={() => downloadAt(url, resolvedStyle, logo, downloadSize, downloadName, 'svg')}
+            >
+              SVG
+            </button>
+          </div>
+        </>
       )}
     </div>
   );
