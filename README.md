@@ -10,7 +10,7 @@ Marketplace), deployed on Vercel.
 
 ## How it works
 
-1. You create a link in the dashboard (`/dashboard`) with a destination URL.
+1. You create a link on the dashboard (the app's main page) with a destination URL.
 2. A QR code is generated pointing at `yourapp.vercel.app/r/{code}`.
 3. When scanned, `/r/{code}` logs the scan and redirects to your destination
    URL with `?qr_cid=<click id>` appended.
@@ -54,7 +54,7 @@ can be downloaded as PNG or SVG.
    included in `schema.sql` for fresh installs).
 
 5. In Vercel Project Settings > Environment Variables, set:
-   - `DASHBOARD_PASSWORD` - whatever password you want for `/dashboard`
+   - `DASHBOARD_PASSWORD` - whatever password you want for the dashboard
    - `NEXT_PUBLIC_BASE_URL` - your deployed URL, e.g. `https://qr-tracker.vercel.app`
 
    Add the same values to `.env.local` for local testing.
@@ -66,8 +66,8 @@ can be downloaded as PNG or SVG.
 
 ## Using it
 
-- Visit `/dashboard` (any username, password whatever you set) to create
-  QR codes and see stats.
+- Visit your deployed URL (any username, password whatever you set) to
+  create QR codes and see stats — the dashboard is the app's main page.
 - On the site each QR code points to, add:
   ```html
   <script src="https://YOUR-DEPLOYED-URL/snippet.js"></script>

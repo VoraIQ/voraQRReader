@@ -24,6 +24,6 @@ export async function createLinkAction(formData: FormData) {
   }
 
   const { code } = await createLink(destinationUrl.trim(), typeof label === 'string' ? label.trim() : '', style);
-  revalidatePath('/dashboard');
-  redirect(`/dashboard?created=${code}`);
+  revalidatePath('/');
+  redirect(`/?created=${code}`);
 }

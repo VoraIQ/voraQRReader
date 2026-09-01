@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Protects /dashboard with a single shared password (this is a personal
-// tool, not a multi-user product, so simple HTTP basic auth is enough).
+// Protects the dashboard (the app's main page) with a single shared
+// password (this is a personal tool, not a multi-user product, so simple
+// HTTP basic auth is enough).
 export function proxy(request: NextRequest) {
   const authHeader = request.headers.get('authorization');
 
@@ -21,5 +22,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*'],
+  matcher: ['/'],
 };
