@@ -317,9 +317,17 @@ p, .type-body { font-size: var(--type-body-size); font-weight: var(--type-body-w
 /* Header */
 .dash-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
 .dash-header-left { display: flex; flex-direction: column; gap: 10px; }
+.dash-header-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .dash-header-stats { display: flex; gap: 28px; padding-bottom: 4px; flex-wrap: wrap; }
 .dash-stat { display: flex; flex-direction: column; gap: 2px; }
 .dash-stat-value { font-size: var(--type-heading-lg-size); font-weight: var(--type-heading-lg-weight); letter-spacing: var(--type-heading-lg-tracking); }
+
+/* Login page */
+.login-page { min-height: 60vh; display: flex; align-items: center; justify-content: center; }
+.login-card { width: 100%; max-width: 360px; padding: 32px 28px; display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.login-form { display: flex; flex-direction: column; gap: 16px; width: 100%; margin-top: 8px; }
+.login-form .field-input { text-align: center; }
+.login-form .btn-primary { width: 100%; }
 
 /* Create card */
 .create-card { background: var(--color-card-background); border: 1px solid var(--color-separator); border-radius: var(--viq-radius-md); box-shadow: var(--shadow-card); overflow: hidden; }

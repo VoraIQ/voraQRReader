@@ -66,8 +66,9 @@ can be downloaded as PNG or SVG.
 
 ## Using it
 
-- Visit your deployed URL (any username, password whatever you set) to
-  create QR codes and see stats — the dashboard is the app's main page.
+- Visit your deployed URL — the dashboard is the app's main page. You'll
+  land on a branded login page and enter the password you set; a signed
+  session cookie keeps you in for 30 days, and "Sign out" clears it.
 - On the site each QR code points to, add:
   ```html
   <script src="https://YOUR-DEPLOYED-URL/snippet.js"></script>
@@ -84,6 +85,7 @@ can be downloaded as PNG or SVG.
 - `/api/action` currently accepts requests from any origin (`Access-Control-
   Allow-Origin: *`). Fine for a personal tool; restrict it to your specific
   domain if this ever handles anything sensitive.
-- Dashboard auth is a single shared password (HTTP Basic Auth via
-  `proxy.ts`), not per-user accounts.
+- Dashboard auth is a single shared password (a login page at `/login`
+  setting a signed session cookie, checked by `proxy.ts`), not per-user
+  accounts.
 - No rate limiting on the redirect or action endpoints.

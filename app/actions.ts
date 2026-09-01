@@ -1,9 +1,11 @@
 'use server';
 
+import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
 import { createLink } from '@/lib/db';
 import { sanitizeQrStyle } from '@/lib/qrStyles';
+import { SESSION_COOKIE_NAME } from '@/lib/auth';
 
 export async function createLinkAction(formData: FormData) {
   const destinationUrl = formData.get('destinationUrl');
@@ -26,4 +28,10 @@ export async function createLinkAction(formData: FormData) {
   const { code } = await createLink(destinationUrl.trim(), typeof label === 'string' ? label.trim() : '', style);
   revalidatePath('/');
   redirect(`/?created=${code}`);
+}
+
+export async function logoutAction() {
+  const cookieStore = await cookies();
+  cookieStore.delete(SESSION_COOKIE_NAME);
+  redirect('/login');
 }

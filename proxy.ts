@@ -1,24 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isValidSessionToken, SESSION_COOKIE_NAME } from '@/lib/auth';
 
 // Protects the dashboard (the app's main page) with a single shared
-// password (this is a personal tool, not a multi-user product, so simple
-// HTTP basic auth is enough).
-export function proxy(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
+// password (this is a personal tool, not a multi-user product), enforced
+// via a signed session cookie set by the /login page rather than a raw
+// browser Basic Auth prompt.
+export async function proxy(request: NextRequest) {
+  const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-  if (authHeader?.startsWith('Basic ')) {
-    const decoded = atob(authHeader.split(' ')[1]);
-    const [, password] = decoded.split(':');
-
-    if (password === process.env.DASHBOARD_PASSWORD) {
-      return NextResponse.next();
-    }
+  if (await isValidSessionToken(token, process.env.DASHBOARD_PASSWORD)) {
+    return NextResponse.next();
   }
 
-  return new NextResponse('Authentication required', {
-    status: 401,
-    headers: { 'WWW-Authenticate': 'Basic realm="QR Tracker"' },
-  });
+  return NextResponse.redirect(new URL('/login', request.url));
 }
 
 export const config = {
