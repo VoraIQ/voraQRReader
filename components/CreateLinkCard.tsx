@@ -24,6 +24,12 @@ import {
 } from '@/lib/qrStyles';
 
 const STORAGE_KEY = 'qr-tracker:last-style';
+// A one-shot, same-tab handoff for the logo across the create action's
+// redirect — never sent to the server, never stored in the database. The
+// dashboard reads this exactly once (see CreatedLinkLogoDownload) so the
+// logo can still be embedded in a download right after creation, then
+// clears it immediately; nothing about it outlives that single read.
+export const PENDING_LOGO_KEY = 'qr-tracker:pending-logo';
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
 // Cosmetic-only placeholder — the real short code doesn't exist until the
 // server action creates the link, so previews just need *some* data.
@@ -543,6 +549,18 @@ export default function CreateLinkCard() {
     setLogoError(null);
   }
 
+  function handleFormSubmit() {
+    try {
+      if (logo) {
+        window.sessionStorage.setItem(PENDING_LOGO_KEY, JSON.stringify({ image: logo, imageSize: logoSize }));
+      } else {
+        window.sessionStorage.removeItem(PENDING_LOGO_KEY);
+      }
+    } catch {
+      // Best-effort only — worst case, the post-create download just won't have the logo.
+    }
+  }
+
   const trimmedUrl = destinationUrl.trim();
   const destinationHostname = parseDestinationHostname(trimmedUrl);
   const isUrlValid = !!destinationHostname;
@@ -553,7 +571,7 @@ export default function CreateLinkCard() {
 
   return (
     <div className="create-card">
-      <form action={createLinkAction} className="create-card-grid">
+      <form action={createLinkAction} onSubmit={handleFormSubmit} className="create-card-grid">
         <div className="create-left">
           <div className="create-title-group">
             <h2>New QR code</h2>
@@ -675,7 +693,7 @@ export default function CreateLinkCard() {
                   </span>
                 </div>
               </div>
-              <span className="caption">Shown here and in this preview's downloads only — not saved with the code</span>
+              <span className="caption">You can download it embedded once, right after you create the code — it isn't saved after that</span>
               {logo && (
                 <div className="logo-sizes">
                   {LOGO_SIZES.map((value) => (

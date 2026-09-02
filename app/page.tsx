@@ -2,6 +2,7 @@ import { getLinksWithStats } from '@/lib/db';
 import { findPresetForStyle } from '@/lib/qrStyles';
 import DashboardHeader from '@/components/DashboardHeader';
 import CreateLinkCard from '@/components/CreateLinkCard';
+import CreatedLinkLogoDownload from '@/components/CreatedLinkLogoDownload';
 import QrPreview from '@/components/QrPreview';
 import DeleteLinkButton from '@/components/DeleteLinkButton';
 
@@ -41,6 +42,7 @@ export default async function DashboardPage({
           <span className="success-banner-title">Code created</span>
           <span className="mono success-banner-url">{displayRedirect(createdLink.redirectUrl)}</span>
           <span className="caption success-banner-meta">Print it, then watch scans land below</span>
+          <CreatedLinkLogoDownload redirectUrl={createdLink.redirectUrl} style={createdLink.style} />
         </div>
       )}
 

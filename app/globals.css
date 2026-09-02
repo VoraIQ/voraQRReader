@@ -422,6 +422,16 @@ p, .type-body { font-size: var(--type-body-size); font-weight: var(--type-body-w
 .success-banner-title { font-weight: var(--font-weight-semibold); color: var(--color-success-text); }
 .success-banner-url { font-size: 12px; color: var(--color-success-text); }
 .success-banner-meta { margin-left: auto; }
+.success-banner-logo {
+  flex-basis: 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(22, 163, 74, 0.2);
+}
+.success-banner-logo-note { color: var(--color-success-text); padding-top: 4px; max-width: 42ch; }
 
 /* Codes section */
 .codes-section { display: flex; flex-direction: column; gap: 12px; }
