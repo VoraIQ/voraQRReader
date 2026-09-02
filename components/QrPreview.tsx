@@ -68,8 +68,16 @@ function buildOptions(url: string, style: QrStyleConfig, size: number, logo: QrL
       color: style.fgGradient ? undefined : style.fgColor,
       gradient: style.fgGradient ? toLibraryGradient(style.fgGradient) : undefined,
     },
-    cornersSquareOptions: { type: style.cornersSquareType, color: eyeFrameColor },
-    cornersDotOptions: { type: style.cornersDotType, color: eyeBallColor },
+    cornersSquareOptions: {
+      type: style.cornersSquareType,
+      color: style.eyeFrameGradient ? undefined : eyeFrameColor,
+      gradient: style.eyeFrameGradient ? toLibraryGradient(style.eyeFrameGradient) : undefined,
+    },
+    cornersDotOptions: {
+      type: style.cornersDotType,
+      color: style.eyeBallGradient ? undefined : eyeBallColor,
+      gradient: style.eyeBallGradient ? toLibraryGradient(style.eyeBallGradient) : undefined,
+    },
     backgroundOptions: { color: style.bgColor },
     // `image` is always present (even as undefined): QRCodeStyling.update()
     // deep-merges by iterating the incoming object's own keys, so an omitted

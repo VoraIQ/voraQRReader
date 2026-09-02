@@ -24,8 +24,12 @@ export interface QrStyleConfig {
   fgGradient?: QrGradient;
   /** Eye frame color (the outer corner squares). Falls back to fgColor/fgGradient when unset. */
   eyeFrameColor?: string;
+  /** Gradient for the eye frame — takes precedence over eyeFrameColor when set. */
+  eyeFrameGradient?: QrGradient;
   /** Eye ball color (the inner corner dots). Falls back to fgColor/fgGradient when unset. */
   eyeBallColor?: string;
+  /** Gradient for the eye ball — takes precedence over eyeBallColor when set. */
+  eyeBallGradient?: QrGradient;
 }
 
 export interface QrPreset {
@@ -204,6 +208,8 @@ export function sanitizeQrStyle(input: unknown): QrStyleConfig | null {
   }
 
   const fgGradient = obj.fgGradient !== undefined ? sanitizeGradient(obj.fgGradient) : null;
+  const eyeFrameGradient = obj.eyeFrameGradient !== undefined ? sanitizeGradient(obj.eyeFrameGradient) : null;
+  const eyeBallGradient = obj.eyeBallGradient !== undefined ? sanitizeGradient(obj.eyeBallGradient) : null;
 
   return {
     dotsType: dotsType as QrShapeType,
@@ -213,6 +219,8 @@ export function sanitizeQrStyle(input: unknown): QrStyleConfig | null {
     bgColor,
     ...(fgGradient ? { fgGradient } : {}),
     ...(typeof eyeFrameColor === 'string' ? { eyeFrameColor } : {}),
+    ...(eyeFrameGradient ? { eyeFrameGradient } : {}),
     ...(typeof eyeBallColor === 'string' ? { eyeBallColor } : {}),
+    ...(eyeBallGradient ? { eyeBallGradient } : {}),
   };
 }

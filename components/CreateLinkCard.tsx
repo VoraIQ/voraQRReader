@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { createLinkAction } from '@/app/actions';
 import QrPreview from './QrPreview';
@@ -15,6 +15,7 @@ import {
   allHaveSafeContrast,
   sanitizeQrStyle,
   type QrCornerType,
+  type QrGradient,
   type QrGradientType,
   type QrLogoSize,
   type QrShapeType,
@@ -69,6 +70,72 @@ function parseDestinationHostname(value: string): string | null {
   }
 }
 
+// A single color-bearing part of the QR (foreground, eye frame, or eye
+// ball) — either a flat color or a two-stop gradient. Hex inputs keep their
+// own buffered string so a mid-typing value doesn't fight the committed one.
+interface ColorSlot {
+  mode: 'solid' | 'gradient';
+  color: string;
+  hexInput: string;
+  gradientType: QrGradientType;
+  gradientStart: string;
+  gradientStartHex: string;
+  gradientEnd: string;
+  gradientEndHex: string;
+}
+
+function makeSolidSlot(color: string): ColorSlot {
+  return {
+    mode: 'solid',
+    color,
+    hexInput: color,
+    gradientType: 'linear',
+    gradientStart: color,
+    gradientStartHex: color,
+    gradientEnd: DEFAULT_GRADIENT_END,
+    gradientEndHex: DEFAULT_GRADIENT_END,
+  };
+}
+
+function slotFromStyle(color: string, gradient: QrGradient | undefined): ColorSlot {
+  if (!gradient) return makeSolidSlot(color);
+  return {
+    mode: 'gradient',
+    color,
+    hexInput: color,
+    gradientType: gradient.type,
+    gradientStart: gradient.colorStops[0],
+    gradientStartHex: gradient.colorStops[0],
+    gradientEnd: gradient.colorStops[1],
+    gradientEndHex: gradient.colorStops[1],
+  };
+}
+
+function slotActiveColors(slot: ColorSlot): string[] {
+  return slot.mode === 'solid' ? [slot.color] : [slot.gradientStart, slot.gradientEnd];
+}
+
+function slotToStyleFields(slot: ColorSlot): { color: string; gradient?: QrGradient } {
+  if (slot.mode === 'gradient') {
+    return { color: slot.gradientStart, gradient: { type: slot.gradientType, colorStops: [slot.gradientStart, slot.gradientEnd] } };
+  }
+  return { color: slot.color };
+}
+
+interface SlotHandlers {
+  setMode: (mode: 'solid' | 'gradient') => void;
+  selectSolid: (value: string) => void;
+  setHexInput: (value: string) => void;
+  commitHex: () => void;
+  setGradientType: (type: QrGradientType) => void;
+  selectGradientStart: (value: string) => void;
+  setGradientStartHex: (value: string) => void;
+  commitGradientStartHex: () => void;
+  selectGradientEnd: (value: string) => void;
+  setGradientEndHex: (value: string) => void;
+  commitGradientEndHex: () => void;
+}
+
 function CreateQrSubmitButton({ disabled }: { disabled: boolean }) {
   const { pending } = useFormStatus();
   return (
@@ -78,69 +145,134 @@ function CreateQrSubmitButton({ disabled }: { disabled: boolean }) {
   );
 }
 
-/** A labeled hex-color swatch row: curated swatches + a native color picker + a hex text field, all wired to the same setter. */
-function ColorField({
+function ColorOrGradientField({
   label,
   swatches,
-  value,
-  hexInput,
-  onHexInputChange,
-  onCommitHex,
-  onSelect,
+  slot,
+  handlers,
   ariaPrefix,
 }: {
   label: string;
   swatches: { name: string; value: string }[];
-  value: string;
-  hexInput: string;
-  onHexInputChange: (value: string) => void;
-  onCommitHex: () => void;
-  onSelect: (value: string) => void;
+  slot: ColorSlot;
+  handlers: SlotHandlers;
   ariaPrefix: string;
 }) {
-  const isCustom = !swatches.some((s) => s.value === value);
   return (
     <div className="swatch-group">
-      <span className="overline">{label}</span>
-      <div className="swatch-row">
-        {swatches.map((s) => (
-          <button
-            key={s.value}
-            type="button"
-            title={s.name}
-            aria-label={`${ariaPrefix}: ${s.name}`}
-            aria-pressed={s.value === value}
-            className={`swatch-btn${s.value === value ? ' swatch-btn-active' : ''}`}
-            style={{ background: s.value }}
-            onClick={() => onSelect(s.value)}
-          />
-        ))}
-        <input
-          type="color"
-          value={value}
-          onChange={(e) => onSelect(e.target.value)}
-          title="Custom color"
-          aria-label={`Custom ${ariaPrefix.toLowerCase()} color`}
-          className={`swatch-btn swatch-color-input${isCustom ? ' swatch-btn-active' : ''}`}
-        />
-        <input
-          type="text"
-          value={hexInput}
-          onChange={(e) => onHexInputChange(e.target.value)}
-          onBlur={onCommitHex}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault();
-              onCommitHex();
-            }
-          }}
-          placeholder="#000000"
-          maxLength={7}
-          spellCheck={false}
-          className="hex-input mono"
-          aria-label={`${ariaPrefix} hex color`}
-        />
+      <div className="fg-mode-row">
+        <span className="overline">{label}</span>
+        <div className="pill-toggle">
+          <button type="button" className={slot.mode === 'solid' ? 'pill-toggle-active' : ''} onClick={() => handlers.setMode('solid')}>
+            Solid
+          </button>
+          <button type="button" className={slot.mode === 'gradient' ? 'pill-toggle-active' : ''} onClick={() => handlers.setMode('gradient')}>
+            Gradient
+          </button>
+        </div>
       </div>
+      {slot.mode === 'solid' ? (
+        <div className="swatch-row">
+          {swatches.map((s) => (
+            <button
+              key={s.value}
+              type="button"
+              title={s.name}
+              aria-label={`${ariaPrefix}: ${s.name}`}
+              aria-pressed={s.value === slot.color}
+              className={`swatch-btn${s.value === slot.color ? ' swatch-btn-active' : ''}`}
+              style={{ background: s.value }}
+              onClick={() => handlers.selectSolid(s.value)}
+            />
+          ))}
+          <input
+            type="color"
+            value={slot.color}
+            onChange={(e) => handlers.selectSolid(e.target.value)}
+            title="Custom color"
+            aria-label={`Custom ${ariaPrefix.toLowerCase()} color`}
+            className={`swatch-btn swatch-color-input${!swatches.some((s) => s.value === slot.color) ? ' swatch-btn-active' : ''}`}
+          />
+          <input
+            type="text"
+            value={slot.hexInput}
+            onChange={(e) => handlers.setHexInput(e.target.value)}
+            onBlur={handlers.commitHex}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handlers.commitHex();
+              }
+            }}
+            placeholder="#000000"
+            maxLength={7}
+            spellCheck={false}
+            className="hex-input mono"
+            aria-label={`${ariaPrefix} hex color`}
+          />
+        </div>
+      ) : (
+        <div className="gradient-editor">
+          <div className="gradient-stop">
+            <input
+              type="color"
+              value={slot.gradientStart}
+              onChange={(e) => handlers.selectGradientStart(e.target.value)}
+              aria-label={`${ariaPrefix} gradient start color`}
+            />
+            <input
+              type="text"
+              value={slot.gradientStartHex}
+              onChange={(e) => handlers.setGradientStartHex(e.target.value)}
+              onBlur={handlers.commitGradientStartHex}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handlers.commitGradientStartHex();
+                }
+              }}
+              placeholder="#000000"
+              maxLength={7}
+              spellCheck={false}
+              className="hex-input mono"
+              aria-label={`${ariaPrefix} gradient start hex color`}
+            />
+          </div>
+          <div className="gradient-stop">
+            <input
+              type="color"
+              value={slot.gradientEnd}
+              onChange={(e) => handlers.selectGradientEnd(e.target.value)}
+              aria-label={`${ariaPrefix} gradient end color`}
+            />
+            <input
+              type="text"
+              value={slot.gradientEndHex}
+              onChange={(e) => handlers.setGradientEndHex(e.target.value)}
+              onBlur={handlers.commitGradientEndHex}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handlers.commitGradientEndHex();
+                }
+              }}
+              placeholder="#000000"
+              maxLength={7}
+              spellCheck={false}
+              className="hex-input mono"
+              aria-label={`${ariaPrefix} gradient end hex color`}
+            />
+          </div>
+          <div className="pill-toggle">
+            <button type="button" className={slot.gradientType === 'linear' ? 'pill-toggle-active' : ''} onClick={() => handlers.setGradientType('linear')}>
+              Linear
+            </button>
+            <button type="button" className={slot.gradientType === 'radial' ? 'pill-toggle-active' : ''} onClick={() => handlers.setGradientType('radial')}>
+              Radial
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -175,131 +307,89 @@ export default function CreateLinkCard() {
   const [urlTouched, setUrlTouched] = useState(false);
   const [label, setLabel] = useState('');
 
-  // Shapes — independent per-part state; a matching curated preset (if any)
-  // is derived below rather than stored, so the picker and the individual
-  // dropdowns can never disagree with each other.
   const [dotsType, setDotsType] = useState<QrShapeType>(QR_PRESETS[0].dotsType);
   const [cornersSquareType, setCornersSquareType] = useState<QrCornerType>(QR_PRESETS[0].cornersSquareType);
   const [cornersDotType, setCornersDotType] = useState<QrCornerType>(QR_PRESETS[0].cornersDotType);
   const [customizeShapes, setCustomizeShapes] = useState(false);
 
-  // Foreground: a flat color, or a two-stop gradient.
-  const [fgMode, setFgMode] = useState<'solid' | 'gradient'>('solid');
-  const [fgColor, setFgColor] = useState(DEFAULT_STYLE.fgColor);
-  const [fgHexInput, setFgHexInput] = useState(DEFAULT_STYLE.fgColor);
-  const [gradientType, setGradientType] = useState<QrGradientType>('linear');
-  const [gradientStart, setGradientStart] = useState(DEFAULT_STYLE.fgColor);
-  const [gradientStartHex, setGradientStartHex] = useState(DEFAULT_STYLE.fgColor);
-  const [gradientEnd, setGradientEnd] = useState(DEFAULT_GRADIENT_END);
-  const [gradientEndHex, setGradientEndHex] = useState(DEFAULT_GRADIENT_END);
-
+  const [fg, setFg] = useState<ColorSlot>(() => makeSolidSlot(DEFAULT_STYLE.fgColor));
   const [bgColor, setBgColor] = useState(DEFAULT_STYLE.bgColor);
 
-  // Eyes: optional independent frame/ball colors, off by default (both fall back to fgColor).
   const [customizeEyeColor, setCustomizeEyeColor] = useState(false);
-  const [eyeFrameColor, setEyeFrameColor] = useState(DEFAULT_STYLE.fgColor);
-  const [eyeFrameHexInput, setEyeFrameHexInput] = useState(DEFAULT_STYLE.fgColor);
-  const [eyeBallColor, setEyeBallColor] = useState(DEFAULT_STYLE.fgColor);
-  const [eyeBallHexInput, setEyeBallHexInput] = useState(DEFAULT_STYLE.fgColor);
+  const [eyeFrame, setEyeFrame] = useState<ColorSlot>(() => makeSolidSlot(DEFAULT_STYLE.fgColor));
+  const [eyeBall, setEyeBall] = useState<ColorSlot>(() => makeSolidSlot(DEFAULT_STYLE.fgColor));
 
   const [logo, setLogo] = useState<string | null>(null);
   const [logoSize, setLogoSize] = useState<QrLogoSize>(0.32);
   const [logoError, setLogoError] = useState<string | null>(null);
   const [colorWarning, setColorWarning] = useState<string | null>(null);
 
+  const hasRestoredRef = useRef(false);
+
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      if (!raw) return;
-      const restored = sanitizeQrStyle(JSON.parse(raw));
-      if (!restored) return;
-
-      setDotsType(restored.dotsType);
-      setCornersSquareType(restored.cornersSquareType);
-      setCornersDotType(restored.cornersDotType);
-
-      if (restored.fgGradient) {
-        setFgMode('gradient');
-        setGradientType(restored.fgGradient.type);
-        setGradientStart(restored.fgGradient.colorStops[0]);
-        setGradientStartHex(restored.fgGradient.colorStops[0]);
-        setGradientEnd(restored.fgGradient.colorStops[1]);
-        setGradientEndHex(restored.fgGradient.colorStops[1]);
-      } else {
-        setFgColor(restored.fgColor);
-        setFgHexInput(restored.fgColor);
-      }
-
-      setBgColor(restored.bgColor);
-
-      if (restored.eyeFrameColor || restored.eyeBallColor) {
-        setCustomizeEyeColor(true);
-        if (restored.eyeFrameColor) {
-          setEyeFrameColor(restored.eyeFrameColor);
-          setEyeFrameHexInput(restored.eyeFrameColor);
-        }
-        if (restored.eyeBallColor) {
-          setEyeBallColor(restored.eyeBallColor);
-          setEyeBallHexInput(restored.eyeBallColor);
+      const restored = raw ? sanitizeQrStyle(JSON.parse(raw)) : null;
+      if (restored) {
+        setDotsType(restored.dotsType);
+        setCornersSquareType(restored.cornersSquareType);
+        setCornersDotType(restored.cornersDotType);
+        setFg(slotFromStyle(restored.fgColor, restored.fgGradient));
+        setBgColor(restored.bgColor);
+        if (restored.eyeFrameColor || restored.eyeFrameGradient || restored.eyeBallColor || restored.eyeBallGradient) {
+          setCustomizeEyeColor(true);
+          setEyeFrame(slotFromStyle(restored.eyeFrameColor ?? restored.fgColor, restored.eyeFrameGradient));
+          setEyeBall(slotFromStyle(restored.eyeBallColor ?? restored.fgColor, restored.eyeBallGradient));
         }
       }
     } catch {
       // Ignore malformed or inaccessible storage — default style is a fine fallback.
+    } finally {
+      hasRestoredRef.current = true;
     }
   }, []);
 
-  const activePreset =
-    QR_PRESETS.find((p) => p.dotsType === dotsType && p.cornersSquareType === cornersSquareType && p.cornersDotType === cornersDotType) ?? null;
-
-  /** Builds the full style from current state, with optional field overrides — the single source of truth for both rendering and persisting. */
-  function buildStyle(overrides: Partial<{
-    dotsType: QrShapeType;
-    cornersSquareType: QrCornerType;
-    cornersDotType: QrCornerType;
-    fgMode: 'solid' | 'gradient';
-    fgColor: string;
-    gradientType: QrGradientType;
-    gradientStart: string;
-    gradientEnd: string;
-    bgColor: string;
-    customizeEyeColor: boolean;
-    eyeFrameColor: string;
-    eyeBallColor: string;
-  }> = {}): QrStyleConfig {
-    const _fgMode = overrides.fgMode ?? fgMode;
-    const _fgColor = overrides.fgColor ?? fgColor;
-    const _gradientType = overrides.gradientType ?? gradientType;
-    const _gradientStart = overrides.gradientStart ?? gradientStart;
-    const _gradientEnd = overrides.gradientEnd ?? gradientEnd;
-    const _customizeEyeColor = overrides.customizeEyeColor ?? customizeEyeColor;
-    const _eyeFrameColor = overrides.eyeFrameColor ?? eyeFrameColor;
-    const _eyeBallColor = overrides.eyeBallColor ?? eyeBallColor;
-
+  function buildStyle(): QrStyleConfig {
+    const fgFields = slotToStyleFields(fg);
+    const eyeFrameFields = slotToStyleFields(eyeFrame);
+    const eyeBallFields = slotToStyleFields(eyeBall);
     return {
-      dotsType: overrides.dotsType ?? dotsType,
-      cornersSquareType: overrides.cornersSquareType ?? cornersSquareType,
-      cornersDotType: overrides.cornersDotType ?? cornersDotType,
-      fgColor: _fgMode === 'solid' ? _fgColor : _gradientStart,
-      bgColor: overrides.bgColor ?? bgColor,
-      ...(_fgMode === 'gradient' ? { fgGradient: { type: _gradientType, colorStops: [_gradientStart, _gradientEnd] as [string, string] } } : {}),
-      ...(_customizeEyeColor ? { eyeFrameColor: _eyeFrameColor, eyeBallColor: _eyeBallColor } : {}),
+      dotsType,
+      cornersSquareType,
+      cornersDotType,
+      fgColor: fgFields.color,
+      bgColor,
+      ...(fgFields.gradient ? { fgGradient: fgFields.gradient } : {}),
+      ...(customizeEyeColor
+        ? {
+            eyeFrameColor: eyeFrameFields.color,
+            ...(eyeFrameFields.gradient ? { eyeFrameGradient: eyeFrameFields.gradient } : {}),
+            eyeBallColor: eyeBallFields.color,
+            ...(eyeBallFields.gradient ? { eyeBallGradient: eyeBallFields.gradient } : {}),
+          }
+        : {}),
     };
   }
 
   const style = buildStyle();
+  const styleKey = JSON.stringify(style);
 
-  /** Every foreground-ish color currently in play, for validating a background change against all of them at once. */
-  function activeForegroundColors(): string[] {
-    const colors = fgMode === 'solid' ? [fgColor] : [gradientStart, gradientEnd];
-    return customizeEyeColor ? [...colors, eyeFrameColor, eyeBallColor] : colors;
-  }
-
-  function persistStyle(next: QrStyleConfig) {
+  // Persist whenever the composed style actually changes, but never before
+  // the restore effect above has had a chance to run (or it would clobber
+  // the saved value with these hooks' initial defaults).
+  useEffect(() => {
+    if (!hasRestoredRef.current) return;
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      window.localStorage.setItem(STORAGE_KEY, styleKey);
     } catch {
       // Best-effort only; not remembering the style for next time isn't fatal.
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [styleKey]);
+
+  function activeForegroundColors(): string[] {
+    const colors = slotActiveColors(fg);
+    return customizeEyeColor ? [...colors, ...slotActiveColors(eyeFrame), ...slotActiveColors(eyeBall)] : colors;
   }
 
   function selectPreset(id: string) {
@@ -308,102 +398,6 @@ export default function CreateLinkCard() {
     setCornersSquareType(next.cornersSquareType);
     setCornersDotType(next.cornersDotType);
     setCustomizeShapes(false);
-    persistStyle(buildStyle({ dotsType: next.dotsType, cornersSquareType: next.cornersSquareType, cornersDotType: next.cornersDotType }));
-  }
-
-  function selectDotsType(value: QrShapeType) {
-    setDotsType(value);
-    persistStyle(buildStyle({ dotsType: value }));
-  }
-  function selectCornersSquareType(value: QrCornerType) {
-    setCornersSquareType(value);
-    persistStyle(buildStyle({ cornersSquareType: value }));
-  }
-  function selectCornersDotType(value: QrCornerType) {
-    setCornersDotType(value);
-    persistStyle(buildStyle({ cornersDotType: value }));
-  }
-
-  function selectFgColor(value: string): boolean {
-    if (!allHaveSafeContrast([value], bgColor)) {
-      setColorWarning('That color is too close to the background for reliable scanning — try something darker.');
-      return false;
-    }
-    setColorWarning(null);
-    setFgColor(value);
-    setFgHexInput(value);
-    persistStyle(buildStyle({ fgMode: 'solid', fgColor: value }));
-    return true;
-  }
-
-  function commitFgHexInput() {
-    const normalized = normalizeHexColor(fgHexInput);
-    if (!normalized) {
-      setColorWarning('Enter a valid hex color, like #3b82f6.');
-      setFgHexInput(fgColor);
-      return;
-    }
-    if (!selectFgColor(normalized)) setFgHexInput(fgColor);
-  }
-
-  function setForegroundMode(mode: 'solid' | 'gradient') {
-    const colorsToCheck = mode === 'solid' ? [fgColor] : [gradientStart, gradientEnd];
-    if (!allHaveSafeContrast(colorsToCheck, bgColor)) {
-      setColorWarning('That color is too close to the background for reliable scanning — try something darker.');
-      return;
-    }
-    setColorWarning(null);
-    setFgMode(mode);
-    persistStyle(buildStyle({ fgMode: mode }));
-  }
-
-  function selectGradientType(value: QrGradientType) {
-    setGradientType(value);
-    persistStyle(buildStyle({ gradientType: value }));
-  }
-
-  function selectGradientStart(value: string): boolean {
-    if (!allHaveSafeContrast([value], bgColor)) {
-      setColorWarning('That color is too close to the background for reliable scanning — try something darker.');
-      return false;
-    }
-    setColorWarning(null);
-    setGradientStart(value);
-    setGradientStartHex(value);
-    persistStyle(buildStyle({ gradientStart: value }));
-    return true;
-  }
-
-  function commitGradientStartHex() {
-    const normalized = normalizeHexColor(gradientStartHex);
-    if (!normalized) {
-      setColorWarning('Enter a valid hex color, like #3b82f6.');
-      setGradientStartHex(gradientStart);
-      return;
-    }
-    if (!selectGradientStart(normalized)) setGradientStartHex(gradientStart);
-  }
-
-  function selectGradientEnd(value: string): boolean {
-    if (!allHaveSafeContrast([value], bgColor)) {
-      setColorWarning('That color is too close to the background for reliable scanning — try something darker.');
-      return false;
-    }
-    setColorWarning(null);
-    setGradientEnd(value);
-    setGradientEndHex(value);
-    persistStyle(buildStyle({ gradientEnd: value }));
-    return true;
-  }
-
-  function commitGradientEndHex() {
-    const normalized = normalizeHexColor(gradientEndHex);
-    if (!normalized) {
-      setColorWarning('Enter a valid hex color, like #3b82f6.');
-      setGradientEndHex(gradientEnd);
-      return;
-    }
-    if (!selectGradientEnd(normalized)) setGradientEndHex(gradientEnd);
   }
 
   function selectBgColor(value: string) {
@@ -413,57 +407,104 @@ export default function CreateLinkCard() {
     }
     setColorWarning(null);
     setBgColor(value);
-    persistStyle(buildStyle({ bgColor: value }));
   }
 
-  function selectEyeFrameColor(value: string): boolean {
-    if (!allHaveSafeContrast([value], bgColor)) {
-      setColorWarning('That color is too close to the background for reliable scanning — try something darker.');
-      return false;
+  /** Builds the full set of solid/gradient handlers for one color slot. `markEyeCustomized` flips "Different eye colors" on the first time an eye slot is touched directly (e.g. restoring a saved eye-only style before the checkbox exists). */
+  function createSlotHandlers(slot: ColorSlot, setSlot: React.Dispatch<React.SetStateAction<ColorSlot>>, markEyeCustomized?: boolean): SlotHandlers {
+    function checkAndWarn(colors: string[]): boolean {
+      if (!allHaveSafeContrast(colors, bgColor)) {
+        setColorWarning('That color is too close to the background for reliable scanning — try something darker.');
+        return false;
+      }
+      setColorWarning(null);
+      return true;
     }
-    setColorWarning(null);
-    setEyeFrameColor(value);
-    setEyeFrameHexInput(value);
-    persistStyle(buildStyle({ customizeEyeColor: true, eyeFrameColor: value }));
-    return true;
-  }
-
-  function commitEyeFrameHexInput() {
-    const normalized = normalizeHexColor(eyeFrameHexInput);
-    if (!normalized) {
-      setColorWarning('Enter a valid hex color, like #3b82f6.');
-      setEyeFrameHexInput(eyeFrameColor);
-      return;
+    function markEye() {
+      if (markEyeCustomized) setCustomizeEyeColor(true);
     }
-    if (!selectEyeFrameColor(normalized)) setEyeFrameHexInput(eyeFrameColor);
+    return {
+      setMode(mode) {
+        const colors = mode === 'solid' ? [slot.color] : [slot.gradientStart, slot.gradientEnd];
+        if (!checkAndWarn(colors)) return;
+        markEye();
+        setSlot((prev) => ({ ...prev, mode }));
+      },
+      selectSolid(value) {
+        if (!checkAndWarn([value])) return;
+        markEye();
+        setSlot((prev) => ({ ...prev, color: value, hexInput: value }));
+      },
+      setHexInput(value) {
+        setSlot((prev) => ({ ...prev, hexInput: value }));
+      },
+      commitHex() {
+        const normalized = normalizeHexColor(slot.hexInput);
+        if (!normalized) {
+          setColorWarning('Enter a valid hex color, like #3b82f6.');
+          setSlot((prev) => ({ ...prev, hexInput: prev.color }));
+          return;
+        }
+        if (!checkAndWarn([normalized])) {
+          setSlot((prev) => ({ ...prev, hexInput: prev.color }));
+          return;
+        }
+        markEye();
+        setSlot((prev) => ({ ...prev, color: normalized, hexInput: normalized }));
+      },
+      setGradientType(type) {
+        markEye();
+        setSlot((prev) => ({ ...prev, gradientType: type }));
+      },
+      selectGradientStart(value) {
+        if (!checkAndWarn([value])) return;
+        markEye();
+        setSlot((prev) => ({ ...prev, gradientStart: value, gradientStartHex: value }));
+      },
+      setGradientStartHex(value) {
+        setSlot((prev) => ({ ...prev, gradientStartHex: value }));
+      },
+      commitGradientStartHex() {
+        const normalized = normalizeHexColor(slot.gradientStartHex);
+        if (!normalized) {
+          setColorWarning('Enter a valid hex color, like #3b82f6.');
+          setSlot((prev) => ({ ...prev, gradientStartHex: prev.gradientStart }));
+          return;
+        }
+        if (!checkAndWarn([normalized])) {
+          setSlot((prev) => ({ ...prev, gradientStartHex: prev.gradientStart }));
+          return;
+        }
+        markEye();
+        setSlot((prev) => ({ ...prev, gradientStart: normalized, gradientStartHex: normalized }));
+      },
+      selectGradientEnd(value) {
+        if (!checkAndWarn([value])) return;
+        markEye();
+        setSlot((prev) => ({ ...prev, gradientEnd: value, gradientEndHex: value }));
+      },
+      setGradientEndHex(value) {
+        setSlot((prev) => ({ ...prev, gradientEndHex: value }));
+      },
+      commitGradientEndHex() {
+        const normalized = normalizeHexColor(slot.gradientEndHex);
+        if (!normalized) {
+          setColorWarning('Enter a valid hex color, like #3b82f6.');
+          setSlot((prev) => ({ ...prev, gradientEndHex: prev.gradientEnd }));
+          return;
+        }
+        if (!checkAndWarn([normalized])) {
+          setSlot((prev) => ({ ...prev, gradientEndHex: prev.gradientEnd }));
+          return;
+        }
+        markEye();
+        setSlot((prev) => ({ ...prev, gradientEnd: normalized, gradientEndHex: normalized }));
+      },
+    };
   }
 
-  function selectEyeBallColor(value: string): boolean {
-    if (!allHaveSafeContrast([value], bgColor)) {
-      setColorWarning('That color is too close to the background for reliable scanning — try something darker.');
-      return false;
-    }
-    setColorWarning(null);
-    setEyeBallColor(value);
-    setEyeBallHexInput(value);
-    persistStyle(buildStyle({ customizeEyeColor: true, eyeBallColor: value }));
-    return true;
-  }
-
-  function commitEyeBallHexInput() {
-    const normalized = normalizeHexColor(eyeBallHexInput);
-    if (!normalized) {
-      setColorWarning('Enter a valid hex color, like #3b82f6.');
-      setEyeBallHexInput(eyeBallColor);
-      return;
-    }
-    if (!selectEyeBallColor(normalized)) setEyeBallHexInput(eyeBallColor);
-  }
-
-  function toggleCustomizeEyeColor(checked: boolean) {
-    setCustomizeEyeColor(checked);
-    persistStyle(buildStyle({ customizeEyeColor: checked }));
-  }
+  const fgHandlers = createSlotHandlers(fg, setFg);
+  const eyeFrameHandlers = createSlotHandlers(eyeFrame, setEyeFrame, true);
+  const eyeBallHandlers = createSlotHandlers(eyeBall, setEyeBall, true);
 
   function handleLogoFile(file: File) {
     if (!ALLOWED_LOGO_TYPES.includes(file.type)) {
@@ -493,6 +534,8 @@ export default function CreateLinkCard() {
   const isUrlValid = !!destinationHostname;
   const showUrlError = urlTouched && trimmedUrl.length > 0 && !isUrlValid;
   const logoOptions = logo ? { image: logo, imageSize: logoSize } : undefined;
+  const activePreset =
+    QR_PRESETS.find((p) => p.dotsType === dotsType && p.cornersSquareType === cornersSquareType && p.cornersDotType === cornersDotType) ?? null;
 
   return (
     <div className="create-card">
@@ -560,119 +603,15 @@ export default function CreateLinkCard() {
             </label>
             {customizeShapes && (
               <div className="shape-picker-row">
-                <ShapeSelect label="Body" value={dotsType} options={DOT_SHAPE_TYPES} onChange={(v) => selectDotsType(v as QrShapeType)} />
-                <ShapeSelect label="Eye frame" value={cornersSquareType} options={CORNER_SHAPE_TYPES} onChange={selectCornersSquareType} />
-                <ShapeSelect label="Eye ball" value={cornersDotType} options={CORNER_SHAPE_TYPES} onChange={selectCornersDotType} />
+                <ShapeSelect label="Body" value={dotsType} options={DOT_SHAPE_TYPES} onChange={(v) => setDotsType(v as QrShapeType)} />
+                <ShapeSelect label="Eye frame" value={cornersSquareType} options={CORNER_SHAPE_TYPES} onChange={setCornersSquareType} />
+                <ShapeSelect label="Eye ball" value={cornersDotType} options={CORNER_SHAPE_TYPES} onChange={setCornersDotType} />
               </div>
             )}
           </div>
 
           <div className="swatch-group-row">
-            <div className="swatch-group">
-              <div className="fg-mode-row">
-                <span className="overline">Foreground</span>
-                <div className="pill-toggle">
-                  <button type="button" className={fgMode === 'solid' ? 'pill-toggle-active' : ''} onClick={() => setForegroundMode('solid')}>
-                    Solid
-                  </button>
-                  <button type="button" className={fgMode === 'gradient' ? 'pill-toggle-active' : ''} onClick={() => setForegroundMode('gradient')}>
-                    Gradient
-                  </button>
-                </div>
-              </div>
-              {fgMode === 'solid' ? (
-                <div className="swatch-row">
-                  {FOREGROUND_SWATCHES.map((s) => (
-                    <button
-                      key={s.value}
-                      type="button"
-                      title={s.name}
-                      aria-label={s.name}
-                      aria-pressed={s.value === fgColor}
-                      className={`swatch-btn${s.value === fgColor ? ' swatch-btn-active' : ''}`}
-                      style={{ background: s.value }}
-                      onClick={() => selectFgColor(s.value)}
-                    />
-                  ))}
-                  <input
-                    type="color"
-                    value={fgColor}
-                    onChange={(e) => selectFgColor(e.target.value)}
-                    title="Custom color"
-                    aria-label="Custom foreground color"
-                    className={`swatch-btn swatch-color-input${!FOREGROUND_SWATCHES.some((s) => s.value === fgColor) ? ' swatch-btn-active' : ''}`}
-                  />
-                  <input
-                    type="text"
-                    value={fgHexInput}
-                    onChange={(e) => setFgHexInput(e.target.value)}
-                    onBlur={commitFgHexInput}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        commitFgHexInput();
-                      }
-                    }}
-                    placeholder="#000000"
-                    maxLength={7}
-                    spellCheck={false}
-                    className="hex-input mono"
-                    aria-label="Foreground hex color"
-                  />
-                </div>
-              ) : (
-                <div className="gradient-editor">
-                  <div className="gradient-stop">
-                    <input type="color" value={gradientStart} onChange={(e) => selectGradientStart(e.target.value)} aria-label="Gradient start color" />
-                    <input
-                      type="text"
-                      value={gradientStartHex}
-                      onChange={(e) => setGradientStartHex(e.target.value)}
-                      onBlur={commitGradientStartHex}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          commitGradientStartHex();
-                        }
-                      }}
-                      placeholder="#000000"
-                      maxLength={7}
-                      spellCheck={false}
-                      className="hex-input mono"
-                      aria-label="Gradient start hex color"
-                    />
-                  </div>
-                  <div className="gradient-stop">
-                    <input type="color" value={gradientEnd} onChange={(e) => selectGradientEnd(e.target.value)} aria-label="Gradient end color" />
-                    <input
-                      type="text"
-                      value={gradientEndHex}
-                      onChange={(e) => setGradientEndHex(e.target.value)}
-                      onBlur={commitGradientEndHex}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault();
-                          commitGradientEndHex();
-                        }
-                      }}
-                      placeholder="#000000"
-                      maxLength={7}
-                      spellCheck={false}
-                      className="hex-input mono"
-                      aria-label="Gradient end hex color"
-                    />
-                  </div>
-                  <div className="pill-toggle">
-                    <button type="button" className={gradientType === 'linear' ? 'pill-toggle-active' : ''} onClick={() => selectGradientType('linear')}>
-                      Linear
-                    </button>
-                    <button type="button" className={gradientType === 'radial' ? 'pill-toggle-active' : ''} onClick={() => selectGradientType('radial')}>
-                      Radial
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            <ColorOrGradientField label="Foreground" swatches={FOREGROUND_SWATCHES} slot={fg} handlers={fgHandlers} ariaPrefix="Foreground" />
             <div className="swatch-group">
               <span className="overline">Background</span>
               <div className="swatch-row">
@@ -744,37 +683,19 @@ export default function CreateLinkCard() {
 
           <div className="eye-color-section">
             <label className="checkbox-label">
-              <input type="checkbox" checked={customizeEyeColor} onChange={(e) => toggleCustomizeEyeColor(e.target.checked)} />
+              <input type="checkbox" checked={customizeEyeColor} onChange={(e) => setCustomizeEyeColor(e.target.checked)} />
               Different eye colors
             </label>
             {customizeEyeColor && (
               <div className="swatch-group-row">
-                <ColorField
-                  label="Eye frame"
-                  swatches={FOREGROUND_SWATCHES}
-                  value={eyeFrameColor}
-                  hexInput={eyeFrameHexInput}
-                  onHexInputChange={setEyeFrameHexInput}
-                  onCommitHex={commitEyeFrameHexInput}
-                  onSelect={selectEyeFrameColor}
-                  ariaPrefix="Eye frame"
-                />
-                <ColorField
-                  label="Eye ball"
-                  swatches={FOREGROUND_SWATCHES}
-                  value={eyeBallColor}
-                  hexInput={eyeBallHexInput}
-                  onHexInputChange={setEyeBallHexInput}
-                  onCommitHex={commitEyeBallHexInput}
-                  onSelect={selectEyeBallColor}
-                  ariaPrefix="Eye ball"
-                />
+                <ColorOrGradientField label="Eye frame" swatches={FOREGROUND_SWATCHES} slot={eyeFrame} handlers={eyeFrameHandlers} ariaPrefix="Eye frame" />
+                <ColorOrGradientField label="Eye ball" swatches={FOREGROUND_SWATCHES} slot={eyeBall} handlers={eyeBallHandlers} ariaPrefix="Eye ball" />
               </div>
             )}
           </div>
           {colorWarning && <span className="caption field-error">{colorWarning}</span>}
 
-          <input type="hidden" name="style" value={JSON.stringify(style)} />
+          <input type="hidden" name="style" value={styleKey} />
         </div>
 
         <div className="preview-panel">
