@@ -39,6 +39,18 @@ const BACKGROUND_SWATCHES = [
 const LOGO_SIZE_LABELS: Record<QrLogoSize, string> = { 0.24: 'Small', 0.32: 'Medium', 0.4: 'Large' };
 const ALLOWED_LOGO_TYPES = ['image/png', 'image/jpeg', 'image/svg+xml'];
 
+/** Normalizes free-typed text into a `#rrggbb` hex color, expanding shorthand. Returns null if it isn't a valid hex color at all. */
+function normalizeHexColor(value: string): string | null {
+  const trimmed = value.trim();
+  const withHash = trimmed.startsWith('#') ? trimmed : `#${trimmed}`;
+  if (/^#[0-9a-f]{6}$/i.test(withHash)) return withHash.toLowerCase();
+  if (/^#[0-9a-f]{3}$/i.test(withHash)) {
+    const [r, g, b] = withHash.slice(1).split('');
+    return `#${r}${r}${g}${g}${b}${b}`.toLowerCase();
+  }
+  return null;
+}
+
 /** Returns the destination's hostname if it's a well-formed http(s) URL, otherwise null. */
 function parseDestinationHostname(value: string): string | null {
   if (!value) return null;
@@ -71,6 +83,10 @@ export default function CreateLinkCard() {
   const [logoSize, setLogoSize] = useState<QrLogoSize>(0.32);
   const [logoError, setLogoError] = useState<string | null>(null);
   const [colorWarning, setColorWarning] = useState<string | null>(null);
+  const [fgHexInput, setFgHexInput] = useState(DEFAULT_STYLE.fgColor);
+  const [customizeEyeColor, setCustomizeEyeColor] = useState(false);
+  const [eyeColor, setEyeColor] = useState(DEFAULT_STYLE.fgColor);
+  const [eyeHexInput, setEyeHexInput] = useState(DEFAULT_STYLE.fgColor);
 
   useEffect(() => {
     try {
@@ -80,7 +96,13 @@ export default function CreateLinkCard() {
       if (restored) {
         setPresetId(findPresetForStyle(restored).id);
         setFgColor(restored.fgColor);
+        setFgHexInput(restored.fgColor);
         setBgColor(restored.bgColor);
+        if (restored.eyeColor) {
+          setCustomizeEyeColor(true);
+          setEyeColor(restored.eyeColor);
+          setEyeHexInput(restored.eyeColor);
+        }
       }
     } catch {
       // Ignore malformed or inaccessible storage — default style is a fine fallback.
@@ -94,8 +116,10 @@ export default function CreateLinkCard() {
     cornersDotType: preset.cornersDotType,
     fgColor,
     bgColor,
+    ...(customizeEyeColor ? { eyeColor } : {}),
   };
   const isCustomFg = !FOREGROUND_SWATCHES.some((s) => s.value === fgColor);
+  const isCustomEye = !FOREGROUND_SWATCHES.some((s) => s.value === eyeColor);
 
   function persistStyle(next: QrStyleConfig) {
     try {
@@ -111,24 +135,67 @@ export default function CreateLinkCard() {
     persistStyle({ dotsType: next.dotsType, cornersSquareType: next.cornersSquareType, cornersDotType: next.cornersDotType, fgColor, bgColor });
   }
 
-  function selectFgColor(value: string) {
+  function selectFgColor(value: string): boolean {
     if (!hasSafeContrast(value, bgColor)) {
       setColorWarning('That color is too close to the background for reliable scanning — try something darker.');
-      return;
+      return false;
     }
     setColorWarning(null);
     setFgColor(value);
+    setFgHexInput(value);
     persistStyle({ ...style, fgColor: value });
+    return true;
+  }
+
+  function commitFgHexInput() {
+    const normalized = normalizeHexColor(fgHexInput);
+    if (!normalized) {
+      setColorWarning('Enter a valid hex color, like #3b82f6.');
+      setFgHexInput(fgColor);
+      return;
+    }
+    if (!selectFgColor(normalized)) {
+      setFgHexInput(fgColor);
+    }
   }
 
   function selectBgColor(value: string) {
-    if (!hasSafeContrast(fgColor, value)) {
-      setColorWarning('That background would make the current foreground too hard to scan.');
+    if (!hasSafeContrast(fgColor, value) || (customizeEyeColor && !hasSafeContrast(eyeColor, value))) {
+      setColorWarning('That background would make the current colors too hard to scan.');
       return;
     }
     setColorWarning(null);
     setBgColor(value);
     persistStyle({ ...style, bgColor: value });
+  }
+
+  function selectEyeColor(value: string): boolean {
+    if (!hasSafeContrast(value, bgColor)) {
+      setColorWarning('That color is too close to the background for reliable scanning — try something darker.');
+      return false;
+    }
+    setColorWarning(null);
+    setEyeColor(value);
+    setEyeHexInput(value);
+    persistStyle({ ...style, eyeColor: value });
+    return true;
+  }
+
+  function commitEyeHexInput() {
+    const normalized = normalizeHexColor(eyeHexInput);
+    if (!normalized) {
+      setColorWarning('Enter a valid hex color, like #3b82f6.');
+      setEyeHexInput(eyeColor);
+      return;
+    }
+    if (!selectEyeColor(normalized)) {
+      setEyeHexInput(eyeColor);
+    }
+  }
+
+  function toggleCustomizeEyeColor(checked: boolean) {
+    setCustomizeEyeColor(checked);
+    persistStyle({ dotsType: preset.dotsType, cornersSquareType: preset.cornersSquareType, cornersDotType: preset.cornersDotType, fgColor, bgColor, ...(checked ? { eyeColor } : {}) });
   }
 
   function handleLogoFile(file: File) {
@@ -212,7 +279,14 @@ export default function CreateLinkCard() {
                 >
                   <QrPreview
                     url={PREVIEW_DATA}
-                    style={{ dotsType: p.dotsType, cornersSquareType: p.cornersSquareType, cornersDotType: p.cornersDotType, fgColor, bgColor }}
+                    style={{
+                      dotsType: p.dotsType,
+                      cornersSquareType: p.cornersSquareType,
+                      cornersDotType: p.cornersDotType,
+                      fgColor,
+                      bgColor,
+                      ...(customizeEyeColor ? { eyeColor } : {}),
+                    }}
                     size={52}
                   />
                   <span className="preset-card-name">{p.name}</span>
@@ -246,7 +320,73 @@ export default function CreateLinkCard() {
                   aria-label="Custom foreground color"
                   className={`swatch-btn swatch-color-input${isCustomFg ? ' swatch-btn-active' : ''}`}
                 />
+                <input
+                  type="text"
+                  value={fgHexInput}
+                  onChange={(e) => setFgHexInput(e.target.value)}
+                  onBlur={commitFgHexInput}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      commitFgHexInput();
+                    }
+                  }}
+                  placeholder="#000000"
+                  maxLength={7}
+                  spellCheck={false}
+                  className="hex-input mono"
+                  aria-label="Foreground hex color"
+                />
               </div>
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={customizeEyeColor}
+                  onChange={(e) => toggleCustomizeEyeColor(e.target.checked)}
+                />
+                Different eye color
+              </label>
+              {customizeEyeColor && (
+                <div className="swatch-row">
+                  {FOREGROUND_SWATCHES.map((s) => (
+                    <button
+                      key={s.value}
+                      type="button"
+                      title={s.name}
+                      aria-label={`Eye color: ${s.name}`}
+                      aria-pressed={s.value === eyeColor}
+                      className={`swatch-btn${s.value === eyeColor ? ' swatch-btn-active' : ''}`}
+                      style={{ background: s.value }}
+                      onClick={() => selectEyeColor(s.value)}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    value={eyeColor}
+                    onChange={(e) => selectEyeColor(e.target.value)}
+                    title="Custom eye color"
+                    aria-label="Custom eye color"
+                    className={`swatch-btn swatch-color-input${isCustomEye ? ' swatch-btn-active' : ''}`}
+                  />
+                  <input
+                    type="text"
+                    value={eyeHexInput}
+                    onChange={(e) => setEyeHexInput(e.target.value)}
+                    onBlur={commitEyeHexInput}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        commitEyeHexInput();
+                      }
+                    }}
+                    placeholder="#000000"
+                    maxLength={7}
+                    spellCheck={false}
+                    className="hex-input mono"
+                    aria-label="Eye hex color"
+                  />
+                </div>
+              )}
             </div>
             <div className="swatch-group">
               <span className="overline">Background</span>
@@ -328,7 +468,6 @@ export default function CreateLinkCard() {
           </div>
           <div className="preview-meta">
             {destinationHostname && <span className="preview-destination">→ {destinationHostname}</span>}
-            <span className="mono preview-url">{PREVIEW_DATA}</span>
             <span className="caption">Short code is assigned on create</span>
           </div>
           <div className="preview-actions">

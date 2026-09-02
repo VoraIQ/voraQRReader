@@ -11,6 +11,8 @@ export interface QrStyleConfig {
   cornersDotType: QrCornerType;
   fgColor: string;
   bgColor: string;
+  /** "Eye" color (the corner squares + their inner dots). Falls back to fgColor when unset. */
+  eyeColor?: string;
 }
 
 export interface QrPreset {
@@ -129,6 +131,7 @@ export function sanitizeQrStyle(input: unknown): QrStyleConfig | null {
   const cornersDotType = obj.cornersDotType;
   const fgColor = obj.fgColor;
   const bgColor = obj.bgColor;
+  const eyeColor = obj.eyeColor;
 
   if (
     typeof dotsType !== 'string' ||
@@ -140,7 +143,8 @@ export function sanitizeQrStyle(input: unknown): QrStyleConfig | null {
     typeof fgColor !== 'string' ||
     !HEX_COLOR_RE.test(fgColor) ||
     typeof bgColor !== 'string' ||
-    !HEX_COLOR_RE.test(bgColor)
+    !HEX_COLOR_RE.test(bgColor) ||
+    (eyeColor !== undefined && (typeof eyeColor !== 'string' || !HEX_COLOR_RE.test(eyeColor)))
   ) {
     return null;
   }
@@ -151,5 +155,6 @@ export function sanitizeQrStyle(input: unknown): QrStyleConfig | null {
     cornersDotType: cornersDotType as QrCornerType,
     fgColor,
     bgColor,
+    ...(typeof eyeColor === 'string' ? { eyeColor } : {}),
   };
 }

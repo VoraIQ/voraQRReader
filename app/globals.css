@@ -364,7 +364,7 @@ p, .type-body { font-size: var(--type-body-size); font-weight: var(--type-body-w
 
 .swatch-group-row { display: flex; gap: 32px; flex-wrap: wrap; align-items: flex-start; }
 .swatch-group { display: flex; flex-direction: column; gap: 10px; }
-.swatch-row { display: flex; gap: 8px; }
+.swatch-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .swatch-btn { width: 32px; height: 32px; border-radius: var(--viq-radius-full); cursor: pointer; padding: 0; border: 1px solid var(--color-separator-opaque); box-shadow: none; transition: transform var(--duration-fast) var(--ease-default); }
 .swatch-btn-active { border: 2px solid var(--color-brand-primary); box-shadow: 0 0 0 3px var(--color-accent-glow); }
 .swatch-color-input { -webkit-appearance: none; appearance: none; background: none; border-style: dashed; }
@@ -372,6 +372,12 @@ p, .type-body { font-size: var(--type-body-size); font-weight: var(--type-body-w
 .swatch-color-input::-webkit-color-swatch-wrapper { padding: 2px; }
 .swatch-color-input::-webkit-color-swatch { border: none; border-radius: var(--viq-radius-full); }
 .swatch-color-input::-moz-color-swatch { border: none; border-radius: var(--viq-radius-full); }
+
+.hex-input { width: 84px; height: 32px; padding: 0 10px; font-size: 12px; color: var(--color-label-primary); background: var(--color-background-primary); border: 1px solid var(--color-separator-opaque); border-radius: var(--viq-radius-sm); text-transform: lowercase; }
+.hex-input:focus-visible { outline: none; border-color: var(--color-brand-primary); box-shadow: 0 0 0 3px var(--color-accent-glow); }
+
+.checkbox-label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--color-label-secondary); cursor: pointer; }
+.checkbox-label input[type='checkbox'] { width: 14px; height: 14px; accent-color: var(--color-brand-primary); cursor: pointer; }
 
 .logo-section { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .logo-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }

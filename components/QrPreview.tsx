@@ -39,6 +39,7 @@ interface QrPreviewProps {
 }
 
 function buildOptions(url: string, style: QrStyleConfig, size: number, logo: QrLogoOptions | null | undefined): Partial<Options> {
+  const eyeColor = style.eyeColor ?? style.fgColor;
   return {
     type: 'svg',
     width: size,
@@ -47,8 +48,8 @@ function buildOptions(url: string, style: QrStyleConfig, size: number, logo: QrL
     margin: Math.max(2, Math.round(size * 0.04)),
     qrOptions: { errorCorrectionLevel: logo ? 'H' : 'M' },
     dotsOptions: { type: style.dotsType, color: style.fgColor },
-    cornersSquareOptions: { type: style.cornersSquareType, color: style.fgColor },
-    cornersDotOptions: { type: style.cornersDotType, color: style.fgColor },
+    cornersSquareOptions: { type: style.cornersSquareType, color: eyeColor },
+    cornersDotOptions: { type: style.cornersDotType, color: eyeColor },
     backgroundOptions: { color: style.bgColor },
     // `image` is always present (even as undefined): QRCodeStyling.update()
     // deep-merges by iterating the incoming object's own keys, so an omitted
