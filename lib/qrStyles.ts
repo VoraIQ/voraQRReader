@@ -5,14 +5,27 @@
 export type QrShapeType = 'square' | 'dots' | 'rounded' | 'classy' | 'classy-rounded' | 'extra-rounded';
 export type QrCornerType = QrShapeType | 'dot';
 
+export type QrGradientType = 'linear' | 'radial';
+
+export interface QrGradient {
+  type: QrGradientType;
+  colorStops: [string, string];
+  /** Degrees, linear gradients only. */
+  rotation?: number;
+}
+
 export interface QrStyleConfig {
   dotsType: QrShapeType;
   cornersSquareType: QrCornerType;
   cornersDotType: QrCornerType;
   fgColor: string;
   bgColor: string;
-  /** "Eye" color (the corner squares + their inner dots). Falls back to fgColor when unset. */
-  eyeColor?: string;
+  /** Linear/radial gradient for the body dots — takes precedence over fgColor when set. */
+  fgGradient?: QrGradient;
+  /** Eye frame color (the outer corner squares). Falls back to fgColor/fgGradient when unset. */
+  eyeFrameColor?: string;
+  /** Eye ball color (the inner corner dots). Falls back to fgColor/fgGradient when unset. */
+  eyeBallColor?: string;
 }
 
 export interface QrPreset {
@@ -27,12 +40,30 @@ export interface QrPreset {
 // independent dropdowns. `qr-code-styling` (v1.9.2) actually accepts the
 // full 6-value shape set for both corner options, but the wider matrix
 // mostly produces mismatched-looking codes, so the MVP sticks to these four.
+// (Independent per-part shape pickers are also available in the UI for
+// anyone who wants to go beyond these.)
 export const QR_PRESETS: QrPreset[] = [
   { id: 'classic', name: 'Classic', dotsType: 'square', cornersSquareType: 'square', cornersDotType: 'square' },
   { id: 'rounded', name: 'Rounded', dotsType: 'rounded', cornersSquareType: 'extra-rounded', cornersDotType: 'dot' },
   { id: 'dots', name: 'Dots', dotsType: 'dots', cornersSquareType: 'dot', cornersDotType: 'dot' },
   { id: 'classy', name: 'Classy', dotsType: 'classy', cornersSquareType: 'square', cornersDotType: 'square' },
 ];
+
+// All shape values the library actually supports for each field (confirmed
+// against the installed package's type definitions), used for the
+// independent shape pickers.
+export const DOT_SHAPE_TYPES: QrShapeType[] = ['square', 'dots', 'rounded', 'classy', 'classy-rounded', 'extra-rounded'];
+export const CORNER_SHAPE_TYPES: QrCornerType[] = [...DOT_SHAPE_TYPES, 'dot'];
+
+export const SHAPE_LABELS: Record<QrCornerType, string> = {
+  square: 'Square',
+  dots: 'Dots',
+  rounded: 'Rounded',
+  classy: 'Classy',
+  'classy-rounded': 'Classy rounded',
+  'extra-rounded': 'Extra rounded',
+  dot: 'Dot',
+};
 
 // Pure black/white by default: this is the one place the app should NOT
 // reach for an off-black brand tint, since it's the actual scanned data
@@ -48,8 +79,8 @@ export const DEFAULT_STYLE: QrStyleConfig = {
   bgColor: DEFAULT_BG_COLOR,
 };
 
-/** Finds the preset matching a style's shapes, defaulting to the first preset. */
-export function findPresetForStyle(style: QrStyleConfig | null): QrPreset {
+/** Finds the preset matching a style's shapes, defaulting to the first preset. Returns null if it doesn't match any curated preset (a custom per-part combination). */
+export function findPresetForStyle(style: QrStyleConfig | null): QrPreset | null {
   if (!style) return QR_PRESETS[0];
   return (
     QR_PRESETS.find(
@@ -57,7 +88,7 @@ export function findPresetForStyle(style: QrStyleConfig | null): QrPreset {
         p.dotsType === style.dotsType &&
         p.cornersSquareType === style.cornersSquareType &&
         p.cornersDotType === style.cornersDotType
-    ) ?? QR_PRESETS[0]
+    ) ?? null
   );
 }
 
@@ -105,16 +136,39 @@ export function hasSafeContrast(fgColor: string, bgColor: string): boolean {
   return contrastRatio(fgColor, bgColor) >= MIN_CONTRAST_RATIO;
 }
 
-const SHAPE_TYPES: ReadonlySet<string> = new Set<QrShapeType>([
-  'square',
-  'dots',
-  'rounded',
-  'classy',
-  'classy-rounded',
-  'extra-rounded',
-]);
-const CORNER_TYPES: ReadonlySet<string> = new Set<string>([...SHAPE_TYPES, 'dot']);
+/** Whether every color in a set (e.g. both gradient stops) has enough contrast against a background. */
+export function allHaveSafeContrast(colors: string[], bgColor: string): boolean {
+  return colors.every((c) => hasSafeContrast(c, bgColor));
+}
+
+const SHAPE_TYPES: ReadonlySet<string> = new Set<QrShapeType>(DOT_SHAPE_TYPES);
+const CORNER_TYPES: ReadonlySet<string> = new Set<string>(CORNER_SHAPE_TYPES);
+const GRADIENT_TYPES: ReadonlySet<string> = new Set<QrGradientType>(['linear', 'radial']);
 const HEX_COLOR_RE = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i;
+
+function isValidHexColor(value: unknown): value is string {
+  return typeof value === 'string' && HEX_COLOR_RE.test(value);
+}
+
+function sanitizeGradient(input: unknown): QrGradient | null {
+  if (!input || typeof input !== 'object') return null;
+  const obj = input as Record<string, unknown>;
+  const type = obj.type;
+  const colorStops = obj.colorStops;
+  const rotation = obj.rotation;
+
+  if (typeof type !== 'string' || !GRADIENT_TYPES.has(type)) return null;
+  if (!Array.isArray(colorStops) || colorStops.length !== 2 || !isValidHexColor(colorStops[0]) || !isValidHexColor(colorStops[1])) {
+    return null;
+  }
+  if (rotation !== undefined && typeof rotation !== 'number') return null;
+
+  return {
+    type: type as QrGradientType,
+    colorStops: [colorStops[0], colorStops[1]],
+    ...(typeof rotation === 'number' ? { rotation } : {}),
+  };
+}
 
 /**
  * Validates an arbitrary value (e.g. parsed from client-supplied form data)
@@ -131,7 +185,8 @@ export function sanitizeQrStyle(input: unknown): QrStyleConfig | null {
   const cornersDotType = obj.cornersDotType;
   const fgColor = obj.fgColor;
   const bgColor = obj.bgColor;
-  const eyeColor = obj.eyeColor;
+  const eyeFrameColor = obj.eyeFrameColor;
+  const eyeBallColor = obj.eyeBallColor;
 
   if (
     typeof dotsType !== 'string' ||
@@ -140,14 +195,15 @@ export function sanitizeQrStyle(input: unknown): QrStyleConfig | null {
     !CORNER_TYPES.has(cornersSquareType) ||
     typeof cornersDotType !== 'string' ||
     !CORNER_TYPES.has(cornersDotType) ||
-    typeof fgColor !== 'string' ||
-    !HEX_COLOR_RE.test(fgColor) ||
-    typeof bgColor !== 'string' ||
-    !HEX_COLOR_RE.test(bgColor) ||
-    (eyeColor !== undefined && (typeof eyeColor !== 'string' || !HEX_COLOR_RE.test(eyeColor)))
+    !isValidHexColor(fgColor) ||
+    !isValidHexColor(bgColor) ||
+    (eyeFrameColor !== undefined && !isValidHexColor(eyeFrameColor)) ||
+    (eyeBallColor !== undefined && !isValidHexColor(eyeBallColor))
   ) {
     return null;
   }
+
+  const fgGradient = obj.fgGradient !== undefined ? sanitizeGradient(obj.fgGradient) : null;
 
   return {
     dotsType: dotsType as QrShapeType,
@@ -155,6 +211,8 @@ export function sanitizeQrStyle(input: unknown): QrStyleConfig | null {
     cornersDotType: cornersDotType as QrCornerType,
     fgColor,
     bgColor,
-    ...(typeof eyeColor === 'string' ? { eyeColor } : {}),
+    ...(fgGradient ? { fgGradient } : {}),
+    ...(typeof eyeFrameColor === 'string' ? { eyeFrameColor } : {}),
+    ...(typeof eyeBallColor === 'string' ? { eyeBallColor } : {}),
   };
 }

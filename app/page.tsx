@@ -91,7 +91,7 @@ export default async function DashboardPage({
                 <div className="code-row-info">
                   <div className="code-row-title">
                     <span className="code-row-title-text">{link.label || 'Untitled code'}</span>
-                    <span className="viq-badge">{preset.name}</span>
+                    <span className="viq-badge">{preset?.name ?? 'Custom'}</span>
                   </div>
                   <a href={link.destinationUrl} target="_blank" rel="noreferrer" className="type-body-sm code-row-dest">
                     {link.destinationUrl}

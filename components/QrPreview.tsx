@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import QRCodeStyling, { type Options } from 'qr-code-styling';
-import { DEFAULT_STYLE, type QrLogoSize, type QrStyleConfig } from '@/lib/qrStyles';
+import QRCodeStyling, { type Gradient, type Options } from 'qr-code-styling';
+import { DEFAULT_STYLE, type QrGradient, type QrLogoSize, type QrStyleConfig } from '@/lib/qrStyles';
 
 // Downloads are generated at a dedicated resolution regardless of the
 // on-screen preview size (52-188px), adjustable via the quality slider.
@@ -38,8 +38,20 @@ interface QrPreviewProps {
   className?: string;
 }
 
+function toLibraryGradient(gradient: QrGradient): Gradient {
+  return {
+    type: gradient.type,
+    rotation: gradient.rotation,
+    colorStops: [
+      { offset: 0, color: gradient.colorStops[0] },
+      { offset: 1, color: gradient.colorStops[1] },
+    ],
+  };
+}
+
 function buildOptions(url: string, style: QrStyleConfig, size: number, logo: QrLogoOptions | null | undefined): Partial<Options> {
-  const eyeColor = style.eyeColor ?? style.fgColor;
+  const eyeFrameColor = style.eyeFrameColor ?? style.fgColor;
+  const eyeBallColor = style.eyeBallColor ?? style.fgColor;
   return {
     type: 'svg',
     width: size,
@@ -47,9 +59,17 @@ function buildOptions(url: string, style: QrStyleConfig, size: number, logo: QrL
     data: url,
     margin: Math.max(2, Math.round(size * 0.04)),
     qrOptions: { errorCorrectionLevel: logo ? 'H' : 'M' },
-    dotsOptions: { type: style.dotsType, color: style.fgColor },
-    cornersSquareOptions: { type: style.cornersSquareType, color: eyeColor },
-    cornersDotOptions: { type: style.cornersDotType, color: eyeColor },
+    // `color`/`gradient` are always both present (one real, one undefined —
+    // see the `image`/`imageOptions` note below): the library's solid color
+    // and gradient are mutually exclusive, and `.update()`'s merge only
+    // clears a previously-set one when the key is explicitly present.
+    dotsOptions: {
+      type: style.dotsType,
+      color: style.fgGradient ? undefined : style.fgColor,
+      gradient: style.fgGradient ? toLibraryGradient(style.fgGradient) : undefined,
+    },
+    cornersSquareOptions: { type: style.cornersSquareType, color: eyeFrameColor },
+    cornersDotOptions: { type: style.cornersDotType, color: eyeBallColor },
     backgroundOptions: { color: style.bgColor },
     // `image` is always present (even as undefined): QRCodeStyling.update()
     // deep-merges by iterating the incoming object's own keys, so an omitted
