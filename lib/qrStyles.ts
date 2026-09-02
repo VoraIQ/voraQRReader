@@ -119,10 +119,18 @@ function srgbChannelToLinear(value: number): number {
   return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 }
 
+/** Expands `#rgb` shorthand to `#rrggbb`; a 6-digit hex passes through unchanged (lowercased). */
+function expandHexColor(hexColor: string): string {
+  if (hexColor.length !== 4) return hexColor.toLowerCase();
+  const [, r, g, b] = hexColor.toLowerCase();
+  return `#${r}${r}${g}${g}${b}${b}`;
+}
+
 function relativeLuminance(hexColor: string): number {
-  const r = parseInt(hexColor.slice(1, 3), 16);
-  const g = parseInt(hexColor.slice(3, 5), 16);
-  const b = parseInt(hexColor.slice(5, 7), 16);
+  const hex = expandHexColor(hexColor);
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
   return 0.2126 * srgbChannelToLinear(r) + 0.7152 * srgbChannelToLinear(g) + 0.0722 * srgbChannelToLinear(b);
 }
 
@@ -169,7 +177,7 @@ function sanitizeGradient(input: unknown): QrGradient | null {
 
   return {
     type: type as QrGradientType,
-    colorStops: [colorStops[0], colorStops[1]],
+    colorStops: [expandHexColor(colorStops[0]), expandHexColor(colorStops[1])],
     ...(typeof rotation === 'number' ? { rotation } : {}),
   };
 }
@@ -215,12 +223,33 @@ export function sanitizeQrStyle(input: unknown): QrStyleConfig | null {
     dotsType: dotsType as QrShapeType,
     cornersSquareType: cornersSquareType as QrCornerType,
     cornersDotType: cornersDotType as QrCornerType,
-    fgColor,
-    bgColor,
+    fgColor: expandHexColor(fgColor),
+    bgColor: expandHexColor(bgColor),
     ...(fgGradient ? { fgGradient } : {}),
-    ...(typeof eyeFrameColor === 'string' ? { eyeFrameColor } : {}),
+    ...(typeof eyeFrameColor === 'string' ? { eyeFrameColor: expandHexColor(eyeFrameColor) } : {}),
     ...(eyeFrameGradient ? { eyeFrameGradient } : {}),
-    ...(typeof eyeBallColor === 'string' ? { eyeBallColor } : {}),
+    ...(typeof eyeBallColor === 'string' ? { eyeBallColor: expandHexColor(eyeBallColor) } : {}),
     ...(eyeBallGradient ? { eyeBallGradient } : {}),
   };
+}
+
+function activeStyleColors(style: QrStyleConfig): string[] {
+  const colors = style.fgGradient ? [...style.fgGradient.colorStops] : [style.fgColor];
+  if (style.eyeFrameGradient) colors.push(...style.eyeFrameGradient.colorStops);
+  else if (style.eyeFrameColor) colors.push(style.eyeFrameColor);
+  if (style.eyeBallGradient) colors.push(...style.eyeBallGradient.colorStops);
+  else if (style.eyeBallColor) colors.push(style.eyeBallColor);
+  return colors;
+}
+
+/**
+ * Rejects a structurally-valid style whose colors are too close to the
+ * background to scan reliably. Apply this on write paths only — creating a
+ * link, restoring a saved draft into the form — never when reading back an
+ * already-persisted style: retroactively enforcing a tightened rule on read
+ * would silently change the look of a code a user already created and may
+ * have printed.
+ */
+export function enforceContrastSafety(style: QrStyleConfig): QrStyleConfig | null {
+  return allHaveSafeContrast(activeStyleColors(style), style.bgColor) ? style : null;
 }

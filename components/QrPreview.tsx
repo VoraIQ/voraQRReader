@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import QRCodeStyling, { type Gradient, type Options } from 'qr-code-styling';
 import { DEFAULT_STYLE, type QrGradient, type QrLogoSize, type QrStyleConfig } from '@/lib/qrStyles';
 
@@ -49,9 +49,45 @@ function toLibraryGradient(gradient: QrGradient): Gradient {
   };
 }
 
+/** Cheap non-cryptographic string hash — just needs to distinguish different logo images, not resist collisions. */
+function hashString(value: string): string {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = (Math.imul(31, hash) + value.charCodeAt(i)) | 0;
+  }
+  return hash.toString(36);
+}
+
+interface ColorFill {
+  color: string;
+  gradient?: QrGradient;
+}
+
+/** An explicit gradient/color wins outright; otherwise falls back to the given fallback gradient/color — this is how eye frame/ball inherit the foreground's gradient, not just its solid color, when left uncustomized. */
+function resolveColorFill(
+  color: string | undefined,
+  gradient: QrGradient | undefined,
+  fallbackColor: string,
+  fallbackGradient: QrGradient | undefined
+): ColorFill {
+  if (gradient) return { color: gradient.colorStops[0], gradient };
+  if (color) return { color };
+  if (fallbackGradient) return { color: fallbackGradient.colorStops[0], gradient: fallbackGradient };
+  return { color: fallbackColor };
+}
+
+// `color`/`gradient` are always both present below (one real, one undefined
+// — see the `image`/`imageOptions` note further down): the library's solid
+// color and gradient are mutually exclusive, and `.update()`'s merge only
+// clears a previously-set one when the key is explicitly present.
+function toDrawOptions(fill: ColorFill): { color: string | undefined; gradient: Gradient | undefined } {
+  return fill.gradient ? { color: undefined, gradient: toLibraryGradient(fill.gradient) } : { color: fill.color, gradient: undefined };
+}
+
 function buildOptions(url: string, style: QrStyleConfig, size: number, logo: QrLogoOptions | null | undefined): Partial<Options> {
-  const eyeFrameColor = style.eyeFrameColor ?? style.fgColor;
-  const eyeBallColor = style.eyeBallColor ?? style.fgColor;
+  const fgFill = resolveColorFill(style.fgColor, style.fgGradient, style.fgColor, undefined);
+  const eyeFrameFill = resolveColorFill(style.eyeFrameColor, style.eyeFrameGradient, style.fgColor, style.fgGradient);
+  const eyeBallFill = resolveColorFill(style.eyeBallColor, style.eyeBallGradient, style.fgColor, style.fgGradient);
   return {
     type: 'svg',
     width: size,
@@ -59,25 +95,9 @@ function buildOptions(url: string, style: QrStyleConfig, size: number, logo: QrL
     data: url,
     margin: Math.max(2, Math.round(size * 0.04)),
     qrOptions: { errorCorrectionLevel: logo ? 'H' : 'M' },
-    // `color`/`gradient` are always both present (one real, one undefined —
-    // see the `image`/`imageOptions` note below): the library's solid color
-    // and gradient are mutually exclusive, and `.update()`'s merge only
-    // clears a previously-set one when the key is explicitly present.
-    dotsOptions: {
-      type: style.dotsType,
-      color: style.fgGradient ? undefined : style.fgColor,
-      gradient: style.fgGradient ? toLibraryGradient(style.fgGradient) : undefined,
-    },
-    cornersSquareOptions: {
-      type: style.cornersSquareType,
-      color: style.eyeFrameGradient ? undefined : eyeFrameColor,
-      gradient: style.eyeFrameGradient ? toLibraryGradient(style.eyeFrameGradient) : undefined,
-    },
-    cornersDotOptions: {
-      type: style.cornersDotType,
-      color: style.eyeBallGradient ? undefined : eyeBallColor,
-      gradient: style.eyeBallGradient ? toLibraryGradient(style.eyeBallGradient) : undefined,
-    },
+    dotsOptions: { type: style.dotsType, ...toDrawOptions(fgFill) },
+    cornersSquareOptions: { type: style.cornersSquareType, ...toDrawOptions(eyeFrameFill) },
+    cornersDotOptions: { type: style.cornersDotType, ...toDrawOptions(eyeBallFill) },
     backgroundOptions: { color: style.bgColor },
     // `image` is always present (even as undefined): QRCodeStyling.update()
     // deep-merges by iterating the incoming object's own keys, so an omitted
@@ -115,7 +135,13 @@ export default function QrPreview({
   const containerRef = useRef<HTMLDivElement>(null);
   const qrRef = useRef<QRCodeStyling | null>(null);
   const resolvedStyle = style ?? DEFAULT_STYLE;
-  const optionsKey = JSON.stringify(resolvedStyle) + (logo ? `|${logo.imageSize}|${logo.image.length}` : '');
+  // Hashed (not just `.length`) so two different logos that happen to encode
+  // to the same string length are still treated as distinct — memoized on
+  // the image's own reference so it isn't rehashed on every unrelated
+  // re-render (a data URL can be hundreds of KB).
+  const logoImage = logo?.image;
+  const logoHash = useMemo(() => (logoImage ? hashString(logoImage) : ''), [logoImage]);
+  const optionsKey = JSON.stringify(resolvedStyle) + (logo ? `|${logo.imageSize}|${logoHash}` : '');
   const [downloadSize, setDownloadSize] = useState(DEFAULT_DOWNLOAD_SIZE);
   const qualityPercent = ((downloadSize - MIN_DOWNLOAD_SIZE) / (MAX_DOWNLOAD_SIZE - MIN_DOWNLOAD_SIZE)) * 100;
 

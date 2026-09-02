@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import { createLinkAction } from '@/app/actions';
 import QrPreview from './QrPreview';
@@ -13,6 +13,7 @@ import {
   QR_PRESETS,
   SHAPE_LABELS,
   allHaveSafeContrast,
+  enforceContrastSafety,
   sanitizeQrStyle,
   type QrCornerType,
   type QrGradient,
@@ -324,16 +325,29 @@ export default function CreateLinkCard() {
   const [logoError, setLogoError] = useState<string | null>(null);
   const [colorWarning, setColorWarning] = useState<string | null>(null);
 
-  const hasRestoredRef = useRef(false);
+  // State, not a ref, so the flip to `true` lands in the same render as the
+  // restored values below — a ref would let the persist effect below see
+  // "restored" flip true before styleKey (still closed over pre-restore
+  // state) had actually updated, briefly clobbering localStorage with the
+  // defaults right after loading the real saved style.
+  const [hasRestored, setHasRestored] = useState(false);
 
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
-      const restored = raw ? sanitizeQrStyle(JSON.parse(raw)) : null;
+      const parsed = raw ? sanitizeQrStyle(JSON.parse(raw)) : null;
+      const restored = parsed ? enforceContrastSafety(parsed) : null;
       if (restored) {
         setDotsType(restored.dotsType);
         setCornersSquareType(restored.cornersSquareType);
         setCornersDotType(restored.cornersDotType);
+        const matchesPreset = QR_PRESETS.some(
+          (p) =>
+            p.dotsType === restored.dotsType &&
+            p.cornersSquareType === restored.cornersSquareType &&
+            p.cornersDotType === restored.cornersDotType
+        );
+        if (!matchesPreset) setCustomizeShapes(true);
         setFg(slotFromStyle(restored.fgColor, restored.fgGradient));
         setBgColor(restored.bgColor);
         if (restored.eyeFrameColor || restored.eyeFrameGradient || restored.eyeBallColor || restored.eyeBallGradient) {
@@ -345,7 +359,7 @@ export default function CreateLinkCard() {
     } catch {
       // Ignore malformed or inaccessible storage — default style is a fine fallback.
     } finally {
-      hasRestoredRef.current = true;
+      setHasRestored(true);
     }
   }, []);
 
@@ -378,14 +392,14 @@ export default function CreateLinkCard() {
   // the restore effect above has had a chance to run (or it would clobber
   // the saved value with these hooks' initial defaults).
   useEffect(() => {
-    if (!hasRestoredRef.current) return;
+    if (!hasRestored) return;
     try {
       window.localStorage.setItem(STORAGE_KEY, styleKey);
     } catch {
       // Best-effort only; not remembering the style for next time isn't fatal.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [styleKey]);
+  }, [styleKey, hasRestored]);
 
   function activeForegroundColors(): string[] {
     const colors = slotActiveColors(fg);
@@ -661,6 +675,7 @@ export default function CreateLinkCard() {
                   </span>
                 </div>
               </div>
+              <span className="caption">Shown here and in this preview's downloads only — not saved with the code</span>
               {logo && (
                 <div className="logo-sizes">
                   {LOGO_SIZES.map((value) => (
@@ -701,11 +716,14 @@ export default function CreateLinkCard() {
         <div className="preview-panel">
           <span className="overline">Preview</span>
           <div className="viq-glass viq-glass--static preview-glass">
-            <QrPreview url={PREVIEW_DATA} style={style} logo={logoOptions} size={188} showDownload downloadName="qr-preview" />
+            {/* No showDownload here: this preview's `url` is a placeholder
+                (PREVIEW_DATA) until the code actually exists, so a download
+                from this panel would encode a link that can never resolve. */}
+            <QrPreview url={PREVIEW_DATA} style={style} logo={logoOptions} size={188} downloadName="qr-preview" />
           </div>
           <div className="preview-meta">
             {destinationHostname && <span className="preview-destination">→ {destinationHostname}</span>}
-            <span className="caption">Short code is assigned on create</span>
+            <span className="caption">Short code and downloads are ready once you create the code</span>
           </div>
           <div className="preview-actions">
             <CreateQrSubmitButton disabled={!isUrlValid} />

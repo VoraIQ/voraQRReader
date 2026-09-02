@@ -4,12 +4,13 @@
    colors_and_type.css (Vora design system 926ebc41).
    ============================================================ */
 
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap");
-
 :root {
   /* ---------- Typography ---------- */
-  --font-family-primary: "DM Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  --font-family-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Font files are loaded and self-hosted via next/font/google in
+     app/layout.tsx (no runtime Google Fonts fetch / render-blocking
+     @import), which exposes them as these two CSS variables. */
+  --font-family-primary: var(--font-dm-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-family-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   --font-weight-regular: 400;
   --font-weight-medium: 510;

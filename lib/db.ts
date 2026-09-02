@@ -1,6 +1,6 @@
 import { neon } from '@neondatabase/serverless';
 import { nanoid } from 'nanoid';
-import type { QrStyleConfig } from './qrStyles';
+import { sanitizeQrStyle, type QrStyleConfig } from './qrStyles';
 
 const sql = neon(process.env.DATABASE_URL!);
 
@@ -29,9 +29,20 @@ export async function createLink(
   return { code };
 }
 
+interface LinkRow {
+  id: number;
+  code: string;
+  destinationUrl: string;
+  label: string | null;
+  createdAt: string;
+  style: unknown;
+  scanCount: number;
+  actionCount: number;
+}
+
 /** All links with their scan and action counts, newest first. */
 export async function getLinksWithStats(): Promise<LinkStats[]> {
-  const rows = await sql`
+  const rows = (await sql`
     SELECT
       l.id,
       l.code,
@@ -46,8 +57,12 @@ export async function getLinksWithStats(): Promise<LinkStats[]> {
     LEFT JOIN actions a ON a.click_id = s.click_id
     GROUP BY l.id
     ORDER BY l.created_at DESC
-  `;
-  return rows as unknown as LinkStats[];
+  `) as unknown as LinkRow[];
+  // `style` is untrusted at this boundary even though the only current
+  // writer sanitizes first — re-validating on read means a malformed row (a
+  // future second writer, a manual DB edit) degrades to the default look
+  // instead of crashing QrPreview's renderer.
+  return rows.map((row) => ({ ...row, style: sanitizeQrStyle(row.style) }));
 }
 
 /** Permanently deletes a link and its scan/action history (cascades). */
