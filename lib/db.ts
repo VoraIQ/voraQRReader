@@ -71,28 +71,31 @@ export async function deleteLink(id: number): Promise<void> {
 }
 
 /**
- * Logs a scan for the given short code and returns the destination URL to
- * redirect to. Returns null if the code doesn't exist.
+ * Looks up the link behind a short code. Returns null if the code doesn't
+ * exist. Kept separate from logScan so the redirect only waits on this one
+ * query; the scan log is written after the visitor is already on their way.
  */
-export async function recordScan(params: {
-  code: string;
+export async function findLinkByCode(
+  code: string
+): Promise<{ id: number; destinationUrl: string } | null> {
+  const rows = await sql`
+    SELECT id, destination_url AS "destinationUrl" FROM links WHERE code = ${code}
+  `;
+  return (rows[0] as { id: number; destinationUrl: string } | undefined) ?? null;
+}
+
+/** Records one scan of an existing link. */
+export async function logScan(params: {
+  linkId: number;
   clickId: string;
   userAgent: string;
   referrer: string;
   country: string;
-}): Promise<{ destinationUrl: string } | null> {
-  const rows = await sql`
-    SELECT id, destination_url AS "destinationUrl" FROM links WHERE code = ${params.code}
-  `;
-  const link = rows[0] as { id: number; destinationUrl: string } | undefined;
-  if (!link) return null;
-
+}): Promise<void> {
   await sql`
     INSERT INTO scans (link_id, click_id, user_agent, referrer, country)
-    VALUES (${link.id}, ${params.clickId}, ${params.userAgent}, ${params.referrer}, ${params.country})
+    VALUES (${params.linkId}, ${params.clickId}, ${params.userAgent}, ${params.referrer}, ${params.country})
   `;
-
-  return { destinationUrl: link.destinationUrl };
 }
 
 /**
